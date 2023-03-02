@@ -1,0 +1,61 @@
+name: Cimon JavaScript Action
+description: Monitor a job execution with Cimon
+inputs:
+  api-key:
+    description: Cimon API key
+    required: false
+  prevent:
+    description: Enable prevention mode
+    required: true
+    default: "false"
+  allowed-ips:
+    description: A comma-separated list of allowed IP addresses
+    required: false
+  allowed-domain-names:
+    description: A comma-separated list of domain names
+    required: false
+  github-token:
+    description: GitHub token (used to overcome GitHub rate limiting)
+    required: false
+    default: ${{ github.token }}
+  report-job-summary:
+    description: Report results through job summary output
+    required: false
+    default: "true"
+  report-process-tree:
+    description: Enable to report the process tree
+    required: false
+    default: "false"
+  slack-webhook-endpoint:
+    description: Slack webhook endpoint to report security events
+    required: false
+  apply-fs-events:
+    description: Enable processing filesystem events and display them in the process tree report
+    required: false
+    default: "false"
+  docker-image:
+    description: Docker image reference
+    required: true
+    default: docker.io/cycodelabs/cimon:v0.2.0
+  docker-image-pull:
+    description: Skip pulling image from registry (Used for debugging)
+    required: false
+    default: "false"
+  docker-username:
+    description: Username to pull image from registry (Used for debugging)
+    required: false
+  docker-password:
+    description: Password to pull image from registry (Used for debugging)
+    required: false
+  enable-metrics:
+    description: Enable to send anonymous metrics reports
+    required: false
+    default: true
+  log-level:
+    description: Log level (Used for debugging)
+    required: false
+    default: "info"
+runs:
+  using: node16
+  main: "dist/main/index.js"
+  post: "dist/post/index.js"

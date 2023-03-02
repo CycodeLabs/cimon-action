@@ -1,0 +1,22 @@
+{
+  "name": "agent-javascript-action",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "all": "npm run clean && npm run dist/main/index.js && npm run dist/post/index.js",
+    "dist/main/index.js": "ncc build --out dist/main src/main/index.js",
+    "dist/post/index.js": "ncc build --out dist/post src/post/index.js",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@actions/artifact": "^1.1.0",
+    "@actions/core": "^1.10.0",
+    "@actions/exec": "^1.1.1",
+    "@vercel/ncc": "^0.34.0"
+  }
+}
