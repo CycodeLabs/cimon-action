@@ -70,6 +70,19 @@ steps:
       report-process-tree: true
       apply-fs-events: true
 ```
+## Security Report
+
+Each pipeline run will report its findings through a security report embedded within the pipeline summary in GitHub Actions. 
+
+Here is an example of a Cimon report:
+
+![](./pics/detect-report.png)
+
+The report, created as a job summary, contains the profile of the running job based on the configuration and includes a snippet to assist the user with transitioning from detection to prevention.
+
+When the policy is set to "prevent", any security anomalies matching the profile are displayed on the report:
+
+![](./pics/prevent-report.png)
 
 ## Development
 
