@@ -4182,6 +4182,7 @@ async function run(config) {
         '--name', 'cimon',
         '--privileged',
         '--pid=host',
+        '--network=host',
         '--cgroupns=host',
         '--volume', '/sys/kernel/debug:/sys/kernel/debug:ro',
         '--volume', '/home/runner/work:/github_workspace',
