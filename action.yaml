@@ -55,6 +55,10 @@ inputs:
     description: Log level (Used for debugging)
     required: false
     default: "info"
+  feature-gates:
+    description: Set of key=value pairs that describe Cimon features.
+    required: false
+
 runs:
   using: node16
   main: "dist/main/index.js"
