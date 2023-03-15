@@ -4138,8 +4138,7 @@ function getActionConfig() {
     const reportProcessTree = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-process-tree');
     const slackWebhookEndpoint = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('slack-webhook-endpoint');
     const enableMetrics = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('enable-metrics');
-
-
+    const featureGates = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getMultilineInput('feature-gates');
 
     return {
         docker: {
@@ -4158,6 +4157,7 @@ function getActionConfig() {
             allowedDomainNames: allowedDomainNames,
             applyFsEvents: applyFsEvents,
             apiKey: apiKey,
+            featureGates: featureGates,
         },
         report: {
             jobSummary: reportJobSummary,
@@ -4228,15 +4228,19 @@ async function run(config) {
     }
 
     if (config.report.slackWebhookEndpoint) {
-        args.push('--env', `CIMON_SLACK_WEBHOOK_ENDPOINT=${config.report.slackWebhookEndpoint}`)
+        args.push('--env', `CIMON_SLACK_WEBHOOK_ENDPOINT=${config.report.slackWebhookEndpoint}`);
     }
 
     if (config.report.enableMetrics) {
-        args.push('--env', `CIMON_ENABLE_METRICS=1`)
+        args.push('--env', `CIMON_ENABLE_METRICS=1`);
     }
 
     if (config.cimon.applyFsEvents) {
         args.push('--env', 'CIMON_APPLY_FS_EVENTS=1');
+    }
+
+    if (config.cimon.featureGates !== "") {
+        args.push('--env', `CIMON_FEATURE_GATES=${config.cimon.featureGates}`);
     }
 
     args.push(config.docker.image);
