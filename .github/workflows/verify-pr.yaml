@@ -26,9 +26,12 @@ jobs:
         uses: ./
         with:
           prevent: true
-          allowed-domain-names: "cycode.com"
+          allowed-hosts: >
+            cycode.com,
+            registry.npmjs.org
 
       - name: Test
         run: |
           curl -I https://api.github.com
           curl -I https://cycode.com
+          wget --quiet --timeout 1 https://registry.npmjs.org || true

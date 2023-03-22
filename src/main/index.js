@@ -14,7 +14,8 @@ function getActionConfig() {
     const logLevel = core.getInput('log-level');
     const preventionMode = core.getBooleanInput('prevent');
     const allowedIPs = core.getInput('allowed-ips');
-    const allowedDomainNames = core.getInput('allowed-domain-names');
+    const allowedHosts = core.getInput('allowed-hosts');
+
     const applyFsEvents = core.getBooleanInput('apply-fs-events');
     const clientId = core.getInput('client-id');
     const secret = core.getInput('secret');
@@ -38,7 +39,7 @@ function getActionConfig() {
             logLevel: logLevel,
             preventionMode: preventionMode,
             allowedIPs: allowedIPs,
-            allowedDomainNames: allowedDomainNames,
+            allowedHosts: allowedHosts,
             applyFsEvents: applyFsEvents,
             clientId: clientId,
             secret: secret,
@@ -98,8 +99,8 @@ async function run(config) {
         args.push('--env', `CIMON_ALLOWED_IPS=${config.cimon.allowedIPs}`);
     }
 
-    if (config.cimon.allowedDomainNames !== "") {
-        args.push('--env', `CIMON_ALLOWED_DOMAIN_NAMES=${config.cimon.allowedDomainNames}`);
+    if (config.cimon.allowedHosts !== "") {
+        args.push('--env', `CIMON_ALLOWED_DOMAIN_NAMES=${config.cimon.allowedHosts}`);
     }
 
     if (config.report.jobSummary) {

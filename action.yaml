@@ -14,7 +14,7 @@ inputs:
   allowed-ips:
     description: A comma-separated list of allowed IP addresses
     required: false
-  allowed-domain-names:
+  allowed-hosts:
     description: A comma-separated list of domain names
     required: false
   github-token:

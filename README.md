@@ -23,23 +23,23 @@ steps:
 
 The action supports the following parameters:
 
-| Name                               | Default                                | Description                                                                                             |
-|------------------------------------|----------------------------------------|---------------------------------------------------------------------------------------------------------|
-| `client-id`                        |                                        | Cimon client ID for authentication                                                                      |
-| `secret`                           |                                        | Cimon secret for authentication                                                                         |
-| `prevent`                          | `false`                                | Enable prevention mode                                                                                  |
-| `allowed-ips`                      |                                        | A comma-separated list of allowed IP addresses                                                          |
-| `allowed-domain-names`             |                                        | A comma-separated list of domain names                                                                  |
-| `github-token`                     | `${{ github.token }}`                  | GitHub token (used to overcome GitHub rate limiting)                                                    |
-| `report-job-summary`               | `true`                                 | Report results through job summary output                                                               |
-| `report-process-tree`              | `false`                                | Enable to report the process tree                                                                       |
-| `slack-webhook-endpoint`           |                                        | Slack webhook endpoint to report security events                                                        |
-| `apply-fs-events`                  | `false`                                | Enable processing filesystem events and display them in the process tree report                         |
-| `docker-image`                     | `docker.io/cycodelabs/cimon:latest`    | Docker image reference                                                                                  |
-| `docker-image-pull`                | `false`                                | Skip pulling image from registry (Used for debugging)                                                   |
-| `docker-username`                  | `false`                                | Username to pull image from registry (Used for debugging)                                               |
-| `docker-password`                  | `false`                                | Password to pull image from registry (Used for debugging)                                               |
-| `log-level`                        | `info`                                 | Log level (Used for debugging)                                                                          |
+| Name                     | Default                             | Description                                                                     |
+|--------------------------|-------------------------------------|---------------------------------------------------------------------------------|
+| `client-id`              |                                     | Cimon client ID for authentication                                              |
+| `secret`                 |                                     | Cimon secret for authentication                                                 |
+| `prevent`                | `false`                             | Enable prevention mode                                                          |
+| `allowed-ips`            |                                     | A comma-separated list of allowed IP addresses                                  |
+| `allowed-hosts`          |                                     | A comma or white space separated list of domain names                           |
+| `github-token`           | `${{ github.token }}`               | GitHub token (used to overcome GitHub rate limiting)                            |
+| `report-job-summary`     | `true`                              | Report results through job summary output                                       |
+| `report-process-tree`    | `false`                             | Enable to report the process tree                                               |
+| `slack-webhook-endpoint` |                                     | Slack webhook endpoint to report security events                                |
+| `apply-fs-events`        | `false`                             | Enable processing filesystem events and display them in the process tree report |
+| `docker-image`           | `docker.io/cycodelabs/cimon:latest` | Docker image reference                                                          |
+| `docker-image-pull`      | `false`                             | Skip pulling image from registry (Used for debugging)                           |
+| `docker-username`        | `false`                             | Username to pull image from registry (Used for debugging)                       |
+| `docker-password`        | `false`                             | Password to pull image from registry (Used for debugging)                       |
+| `log-level`              | `info`                              | Log level (Used for debugging)                                                  |
 
 ## Scenarios
 
