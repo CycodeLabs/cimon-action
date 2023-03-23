@@ -4132,12 +4132,12 @@ function getActionConfig() {
     const allowedIPs = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('allowed-ips');
     const allowedDomainNames = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('allowed-domain-names');
     const applyFsEvents = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('apply-fs-events');
-    const apiKey = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('api-key');
+    const clientId = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('client-id');
+    const secret = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('secret');
 
     const reportJobSummary = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-job-summary');
     const reportProcessTree = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-process-tree');
     const slackWebhookEndpoint = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('slack-webhook-endpoint');
-    const enableMetrics = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('enable-metrics');
     const featureGates = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getMultilineInput('feature-gates');
 
     return {
@@ -4156,14 +4156,14 @@ function getActionConfig() {
             allowedIPs: allowedIPs,
             allowedDomainNames: allowedDomainNames,
             applyFsEvents: applyFsEvents,
-            apiKey: apiKey,
+            clientId: clientId,
+            secret: secret,
             featureGates: featureGates,
         },
         report: {
             jobSummary: reportJobSummary,
             processTree: reportProcessTree,
             slackWebhookEndpoint: slackWebhookEndpoint,
-            enableMetrics: enableMetrics,
         },
     };
 }
@@ -4187,7 +4187,6 @@ async function run(config) {
         '--volume', '/sys/kernel/debug:/sys/kernel/debug:ro',
         '--volume', '/home/runner/work:/github_workspace',
         '--env', `CIMON_LOG_LEVEL=${config.cimon.logLevel}`,
-        '--env', `CIMON_API_KEY=${config.cimon.apiKey}`,
         '--env', 'GITHUB_ACTIONS=true',
         '--env', `GITHUB_TOKEN=${config.github.token}`,
         '--env', `GITHUB_SHA`,
@@ -4231,12 +4230,16 @@ async function run(config) {
         args.push('--env', `CIMON_SLACK_WEBHOOK_ENDPOINT=${config.report.slackWebhookEndpoint}`);
     }
 
-    if (config.report.enableMetrics) {
-        args.push('--env', `CIMON_ENABLE_METRICS=1`);
-    }
-
     if (config.cimon.applyFsEvents) {
         args.push('--env', 'CIMON_APPLY_FS_EVENTS=1');
+    }
+
+    if (config.cimon.clientId !== "") {
+        args.push('--env', `CIMON_CLIENT_ID=${config.cimon.clientId}`);
+    }
+
+    if (config.cimon.secret !== "") {
+        args.push('--env', `CIMON_SECRET=${config.cimon.secret}`);
     }
 
     if (config.cimon.featureGates !== "") {

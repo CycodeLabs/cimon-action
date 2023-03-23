@@ -1,8 +1,11 @@
 name: Cimon JavaScript Action
 description: Monitor a job execution with Cimon
 inputs:
-  api-key:
-    description: Cimon API key
+  client-id:
+    description: Cimon client ID for authentication
+    required: false
+  secret:
+    description: Cimon secret for authentication
     required: false
   prevent:
     description: Enable prevention mode
@@ -47,10 +50,6 @@ inputs:
   docker-password:
     description: Password to pull image from registry (Used for debugging)
     required: false
-  enable-metrics:
-    description: Enable to send anonymous metrics reports
-    required: false
-    default: true
   log-level:
     description: Log level (Used for debugging)
     required: false
@@ -58,7 +57,6 @@ inputs:
   feature-gates:
     description: Set of key=value pairs that describe Cimon features.
     required: false
-
 runs:
   using: node16
   main: "dist/main/index.js"
