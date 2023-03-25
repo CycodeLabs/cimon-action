@@ -25,7 +25,8 @@ The action supports the following parameters:
 
 | Name                               | Default                                | Description                                                                                             |
 |------------------------------------|----------------------------------------|---------------------------------------------------------------------------------------------------------|
-| `api-key`                          |                                        | Cimon API key                                                                                           |
+| `client-id`                        |                                        | Cimon client ID for authentication                                                                      |
+| `secret`                           |                                        | Cimon secret for authentication                                                                         |
 | `prevent`                          | `false`                                | Enable prevention mode                                                                                  |
 | `allowed-ips`                      |                                        | A comma-separated list of allowed IP addresses                                                          |
 | `allowed-domain-names`             |                                        | A comma-separated list of domain names                                                                  |
@@ -38,7 +39,6 @@ The action supports the following parameters:
 | `docker-image-pull`                | `false`                                | Skip pulling image from registry (Used for debugging)                                                   |
 | `docker-username`                  | `false`                                | Username to pull image from registry (Used for debugging)                                               |
 | `docker-password`                  | `false`                                | Password to pull image from registry (Used for debugging)                                               |
-| `enable-metrics`                   | `true`                                 | Enable to send anonymous metrics reports                                                                |
 | `log-level`                        | `info`                                 | Log level (Used for debugging)                                                                          |
 
 ## Scenarios
