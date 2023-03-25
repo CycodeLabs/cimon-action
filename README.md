@@ -1,6 +1,6 @@
 # Secure your CI with Cimon
 
-Cimon detects and stops software supply-chain attacks, including those targeting SolarWinds and CodeCov, through a developer-friendly experience.
+Cimon (pronounced **/ˈsaɪmən/**) detects and stops software supply-chain attacks, including those targeting SolarWinds and CodeCov, through a developer-friendly experience.
 
 By utilizing the revolutionary eBPF technology, Cimon monitors and mitigates attacks within the kernel, denying access to users' assets as soon as they arise.
 
