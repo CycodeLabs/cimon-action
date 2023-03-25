@@ -16,12 +16,12 @@ function getActionConfig() {
     const allowedIPs = core.getInput('allowed-ips');
     const allowedDomainNames = core.getInput('allowed-domain-names');
     const applyFsEvents = core.getBooleanInput('apply-fs-events');
-    const apiKey = core.getInput('api-key');
+    const clientId = core.getInput('client-id');
+    const secret = core.getInput('secret');
 
     const reportJobSummary = core.getBooleanInput('report-job-summary');
     const reportProcessTree = core.getBooleanInput('report-process-tree');
     const slackWebhookEndpoint = core.getInput('slack-webhook-endpoint');
-    const enableMetrics = core.getBooleanInput('enable-metrics');
     const featureGates = core.getMultilineInput('feature-gates');
 
     return {
@@ -40,14 +40,14 @@ function getActionConfig() {
             allowedIPs: allowedIPs,
             allowedDomainNames: allowedDomainNames,
             applyFsEvents: applyFsEvents,
-            apiKey: apiKey,
+            clientId: clientId,
+            secret: secret,
             featureGates: featureGates,
         },
         report: {
             jobSummary: reportJobSummary,
             processTree: reportProcessTree,
             slackWebhookEndpoint: slackWebhookEndpoint,
-            enableMetrics: enableMetrics,
         },
     };
 }
@@ -71,7 +71,6 @@ async function run(config) {
         '--volume', '/sys/kernel/debug:/sys/kernel/debug:ro',
         '--volume', '/home/runner/work:/github_workspace',
         '--env', `CIMON_LOG_LEVEL=${config.cimon.logLevel}`,
-        '--env', `CIMON_API_KEY=${config.cimon.apiKey}`,
         '--env', 'GITHUB_ACTIONS=true',
         '--env', `GITHUB_TOKEN=${config.github.token}`,
         '--env', `GITHUB_SHA`,
@@ -115,12 +114,16 @@ async function run(config) {
         args.push('--env', `CIMON_SLACK_WEBHOOK_ENDPOINT=${config.report.slackWebhookEndpoint}`);
     }
 
-    if (config.report.enableMetrics) {
-        args.push('--env', `CIMON_ENABLE_METRICS=1`);
-    }
-
     if (config.cimon.applyFsEvents) {
         args.push('--env', 'CIMON_APPLY_FS_EVENTS=1');
+    }
+
+    if (config.cimon.clientId !== "") {
+        args.push('--env', `CIMON_CLIENT_ID=${config.cimon.clientId}`);
+    }
+
+    if (config.cimon.secret !== "") {
+        args.push('--env', `CIMON_SECRET=${config.cimon.secret}`);
     }
 
     if (config.cimon.featureGates !== "") {
