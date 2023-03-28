@@ -4216,6 +4216,8 @@ async function run(config) {
     }
 
     if (config.cimon.allowedHosts !== "") {
+        args.push('--env', `CIMON_ALLOWED_HOSTS=${config.cimon.allowedHosts}`);
+        // TODO Remove the CIMON_ALLOWED_DOMAIN_NAMES setting when we upgrade the default image used by this action.
         args.push('--env', `CIMON_ALLOWED_DOMAIN_NAMES=${config.cimon.allowedHosts}`);
     }
 
