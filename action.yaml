@@ -39,7 +39,7 @@ inputs:
   docker-image:
     description: Docker image reference
     required: true
-    default: docker.io/cycodelabs/cimon:v0.3.1
+    default: docker.io/cycodelabs/cimon:v0.3.2
   docker-image-pull:
     description: Skip pulling image from registry (Used for debugging)
     required: false
