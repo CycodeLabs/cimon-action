@@ -57,6 +57,11 @@ inputs:
   feature-gates:
     description: Set of key=value pairs that describe Cimon features.
     required: false
+  fail-on-error:
+    description: Fail the CI if Cimon encountered an error
+    required: false
+    default: "false"
+
 runs:
   using: node16
   main: "dist/main/index.js"

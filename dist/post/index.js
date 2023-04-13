@@ -11008,6 +11008,10 @@ async function run(config) {
         return state.Status !== _docker_docker_js__WEBPACK_IMPORTED_MODULE_3__/* ["default"].CONTAINER_STATUS_EXITED */ .Z.CONTAINER_STATUS_EXITED;
     }, 1000, 30 * 1000);
 
+    if (logs.stderr !== '') {
+        throw new Error(logs.stderr);
+    }
+
     if (containerState.ExitCode !== 0) {
         throw new Error(`Container exited with error: ${containerState.ExitCode}`);
     }
@@ -11018,7 +11022,16 @@ async function run(config) {
 try {
     await run(getActionConfig());
 } catch (error) {
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.setFailed(error.message);
+    const failOnError = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('fail-on-error');
+    const log = error.message;
+    if (failOnError) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.setFailed(log);
+    } else {
+        await _actions_core__WEBPACK_IMPORTED_MODULE_0__.summary.addHeading('Cimon Security Report - Failure')
+            .addRaw('Cimon encountered an error and was shut down due to the "fail-on-error=false" flag. Details of the error are below:')
+            .addCodeBlock(log)
+            .write()
+    }
 }
 __webpack_handle_async_dependencies__();
 }, 1);
