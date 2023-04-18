@@ -15,8 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-
-  verify:
+  verify-standard:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout Code
@@ -25,6 +24,8 @@ jobs:
       - name: Run Cimon
         uses: ./
         with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
           prevent: true
           allowed-hosts: >
             cycode.com,
@@ -35,3 +36,16 @@ jobs:
           curl -I https://api.github.com
           curl -I https://cycode.com
           wget --quiet --timeout 1 https://registry.npmjs.org || true
+
+  verify-fail-on-error:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
+
+      - name: Run Cimon
+        uses: ./
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
+          allowed-hosts: this,would,^$#yield,error

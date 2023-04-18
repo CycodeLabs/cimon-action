@@ -140,7 +140,7 @@ async function run(config) {
     });
 
     if (exitCode !== 0) {
-        throw new Error('Failed starting Cimon container');
+        throw new Error('Failed executing docker run command for Cimon container');
     }
 
     const health = await poll(async () => {
@@ -153,7 +153,7 @@ async function run(config) {
 
     if (health.Status !== docker.CONTAINER_STATUS_HEALTHY) {
         const log = health.Log;
-        let message = 'Failed starting Cimon container';
+        let message = 'Failed reaching healthy container status for Cimon container';
         if (Array.isArray(log) && log.length > 0) {
             const latestEntry = log[0];
             message += `: exit code: ${latestEntry.ExitCode}: ${latestEntry.Output}`;
@@ -167,5 +167,9 @@ async function run(config) {
 try {
     await run(getActionConfig());
 } catch (error) {
-    core.setFailed(error.message);
+    const failOnError = core.getBooleanInput('fail-on-error');
+    const log = error.message;
+    if (failOnError) {
+        core.setFailed(log);
+    }
 }
