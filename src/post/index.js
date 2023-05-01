@@ -7,7 +7,7 @@ import poll from "../poll/poll.js";
 function getActionConfig() {
     return {
         job: process.env.GITHUB_JOB,
-        createArtifact: new Boolean(process.env.CIMON_UPLOAD_ARTIFACT),
+        createArtifact: new Boolean(core.getBooleanInput('upload-artifact')),
     };
 }
 
@@ -20,7 +20,6 @@ async function run(config) {
         core.error(logs.stderr);
     }
 
-    core.info(`upload artifact ${config.createArtifact} | ${typeof(config.createArtifact)}`)
     if (config.createArtifact) {
         const logFile = `cimon-${config.job}-logs.txt`;
         fs.writeFileSync(logFile, logs.stdout);

@@ -10967,7 +10967,7 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 function getActionConfig() {
     return {
         job: process.env.GITHUB_JOB,
-        createArtifact: new Boolean(process.env.CIMON_UPLOAD_ARTIFACT),
+        createArtifact: new Boolean(_actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('upload-artifact')),
     };
 }
 
@@ -10980,7 +10980,6 @@ async function run(config) {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.error(logs.stderr);
     }
 
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`upload artifact ${config.createArtifact} | ${typeof(config.createArtifact)}`)
     if (config.createArtifact) {
         const logFile = `cimon-${config.job}-logs.txt`;
         fs__WEBPACK_IMPORTED_MODULE_2__.writeFileSync(logFile, logs.stdout);
