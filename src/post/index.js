@@ -7,7 +7,7 @@ import poll from "../poll/poll.js";
 function getActionConfig() {
     return {
         job: process.env.GITHUB_JOB,
-        createArtifact: new Boolean(core.getBooleanInput('upload-artifact')),
+        createArtifact: core.getBooleanInput('upload-artifact'),
     };
 }
 
