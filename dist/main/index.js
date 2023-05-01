@@ -4188,6 +4188,7 @@ async function run(config) {
         '--volume', '/sys/kernel/debug:/sys/kernel/debug:ro',
         '--volume', '/home/runner/work:/github_workspace',
         '--env', `CIMON_LOG_LEVEL=${config.cimon.logLevel}`,
+        '--env', `CIMON_UPLOAD_ARTIFACT=${config.cimon.uploadArtifact}`,
         '--env', 'GITHUB_ACTIONS=true',
         '--env', `GITHUB_TOKEN=${config.github.token}`,
         '--env', `GITHUB_SHA`,

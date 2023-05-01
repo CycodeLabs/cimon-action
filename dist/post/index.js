@@ -10967,7 +10967,7 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 function getActionConfig() {
     return {
         job: process.env.GITHUB_JOB,
-        createArtifact: true,
+        createArtifact: new Boolean(process.env.CIMON_UPLOAD_ARTIFACT),
     };
 }
 
