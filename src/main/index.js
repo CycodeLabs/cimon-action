@@ -15,6 +15,7 @@ function getActionConfig() {
     const preventionMode = core.getBooleanInput('prevent');
     const allowedIPs = core.getInput('allowed-ips');
     const allowedHosts = core.getInput('allowed-hosts');
+    const disableArtifact = core.getBooleanInput('disable-artifact');
 
     const applyFsEvents = core.getBooleanInput('apply-fs-events');
     const clientId = core.getInput('client-id');
@@ -44,6 +45,7 @@ function getActionConfig() {
             clientId: clientId,
             secret: secret,
             featureGates: featureGates,
+            disableArtifact: disableArtifact,
         },
         report: {
             jobSummary: reportJobSummary,
@@ -133,6 +135,8 @@ async function run(config) {
         args.push('--env', `CIMON_FEATURE_GATES=${config.cimon.featureGates}`);
     }
 
+    
+    args.push('--env', `CIMON_DISABLE_ARTIFACT=${config.cimon.disableArtifact}`);
     args.push(config.docker.image);
 
     const exitCode = await exec.exec('docker', args, {
