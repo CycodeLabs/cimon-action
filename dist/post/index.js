@@ -10980,6 +10980,7 @@ async function run(config) {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.error(logs.stderr);
     }
 
+    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`upload artifact ${config.createArtifact} | ${typeof(config.createArtifact)}`)
     if (config.createArtifact) {
         const logFile = `cimon-${config.job}-logs.txt`;
         fs__WEBPACK_IMPORTED_MODULE_2__.writeFileSync(logFile, logs.stdout);
