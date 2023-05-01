@@ -61,10 +61,10 @@ inputs:
     description: Fail the CI if Cimon encountered an error
     required: false
     default: "false"
-  disable-artifact:
-    description: Disable uploading logs as artifacts
+  upload-artifact:
+    description: Upload logs as artifacts
     required: false
-    default: "false"
+    default: "true"
 
 runs:
   using: node16

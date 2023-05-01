@@ -62,7 +62,7 @@ jobs:
           client-id: ${{ secrets.CIMON_CLIENT_ID }}
           secret: ${{ secrets.CIMON_SECRET }}
           prevent: true
-          disable-artifact: true
+          upload-artifact: false
           allowed-hosts: >
             cycode.com
 

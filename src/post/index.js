@@ -7,7 +7,7 @@ import poll from "../poll/poll.js";
 function getActionConfig() {
     return {
         job: process.env.GITHUB_JOB,
-        createArtifact: new Boolean(process.env.CIMON_DISABLE_ARTIFACT),
+        createArtifact: new Boolean(process.env.CIMON_UPLOAD_ARTIFACT),
     };
 }
 
