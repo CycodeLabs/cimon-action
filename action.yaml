@@ -30,7 +30,7 @@ inputs:
     required: false
     default: "false"
   report-artifact-log:
-    description: Upload logs as artifacts
+    description: Report results through artifact
     required: false
     default: "true"
   slack-webhook-endpoint:
