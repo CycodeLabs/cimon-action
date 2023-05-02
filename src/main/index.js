@@ -15,7 +15,6 @@ function getActionConfig() {
     const preventionMode = core.getBooleanInput('prevent');
     const allowedIPs = core.getInput('allowed-ips');
     const allowedHosts = core.getInput('allowed-hosts');
-    const uploadArtifact = core.getBooleanInput('upload-artifact');
 
     const applyFsEvents = core.getBooleanInput('apply-fs-events');
     const clientId = core.getInput('client-id');
@@ -23,6 +22,7 @@ function getActionConfig() {
 
     const reportJobSummary = core.getBooleanInput('report-job-summary');
     const reportProcessTree = core.getBooleanInput('report-process-tree');
+    const reportArtifactLog = core.getBooleanInput('report-artifact-log');
     const slackWebhookEndpoint = core.getInput('slack-webhook-endpoint');
     const featureGates = core.getMultilineInput('feature-gates');
 
@@ -45,11 +45,11 @@ function getActionConfig() {
             clientId: clientId,
             secret: secret,
             featureGates: featureGates,
-            uploadArtifact: uploadArtifact,
         },
         report: {
             jobSummary: reportJobSummary,
             processTree: reportProcessTree,
+            reportArtifactLog: reportArtifactLog,
             slackWebhookEndpoint: slackWebhookEndpoint,
         },
     };
@@ -74,7 +74,6 @@ async function run(config) {
         '--volume', '/sys/kernel/debug:/sys/kernel/debug:ro',
         '--volume', '/home/runner/work:/github_workspace',
         '--env', `CIMON_LOG_LEVEL=${config.cimon.logLevel}`,
-        '--env', `CIMON_UPLOAD_ARTIFACT=${config.cimon.uploadArtifact}`,
         '--env', 'GITHUB_ACTIONS=true',
         '--env', `GITHUB_TOKEN=${config.github.token}`,
         '--env', `GITHUB_SHA`,

@@ -4131,7 +4131,6 @@ function getActionConfig() {
     const preventionMode = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('prevent');
     const allowedIPs = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('allowed-ips');
     const allowedHosts = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('allowed-hosts');
-    const uploadArtifact = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('upload-artifact');
 
     const applyFsEvents = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('apply-fs-events');
     const clientId = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('client-id');
@@ -4139,6 +4138,7 @@ function getActionConfig() {
 
     const reportJobSummary = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-job-summary');
     const reportProcessTree = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-process-tree');
+    const reportArtifactLog = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-artifact-log');
     const slackWebhookEndpoint = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('slack-webhook-endpoint');
     const featureGates = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getMultilineInput('feature-gates');
 
@@ -4161,11 +4161,11 @@ function getActionConfig() {
             clientId: clientId,
             secret: secret,
             featureGates: featureGates,
-            uploadArtifact: uploadArtifact,
         },
         report: {
             jobSummary: reportJobSummary,
             processTree: reportProcessTree,
+            reportArtifactLog: reportArtifactLog,
             slackWebhookEndpoint: slackWebhookEndpoint,
         },
     };
@@ -4190,7 +4190,6 @@ async function run(config) {
         '--volume', '/sys/kernel/debug:/sys/kernel/debug:ro',
         '--volume', '/home/runner/work:/github_workspace',
         '--env', `CIMON_LOG_LEVEL=${config.cimon.logLevel}`,
-        '--env', `CIMON_UPLOAD_ARTIFACT=${config.cimon.uploadArtifact}`,
         '--env', 'GITHUB_ACTIONS=true',
         '--env', `GITHUB_TOKEN=${config.github.token}`,
         '--env', `GITHUB_SHA`,
