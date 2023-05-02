@@ -29,6 +29,10 @@ inputs:
     description: Enable to report the process tree
     required: false
     default: "false"
+  report-artifact-log:
+    description: Upload logs as artifacts
+    required: false
+    default: "true"
   slack-webhook-endpoint:
     description: Slack webhook endpoint to report security events
     required: false
@@ -61,10 +65,6 @@ inputs:
     description: Fail the CI if Cimon encountered an error
     required: false
     default: "false"
-  report-artifact-log:
-    description: Upload logs as artifacts
-    required: false
-    default: "true"
 
 runs:
   using: node16
