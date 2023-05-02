@@ -61,7 +61,7 @@ inputs:
     description: Fail the CI if Cimon encountered an error
     required: false
     default: "false"
-  upload-artifact:
+  report-artifact-log:
     description: Upload logs as artifacts
     required: false
     default: "true"
