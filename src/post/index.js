@@ -20,7 +20,6 @@ async function run(config) {
         core.error(logs.stderr);
     }
 
-    core.debug(`${config.createArtifact} | ${typeof(config.createArtifact)}`)
     if (config.createArtifact) {
         const logFile = `cimon-${config.job}-logs.txt`;
         fs.writeFileSync(logFile, logs.stdout);
