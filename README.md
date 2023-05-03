@@ -33,7 +33,7 @@ The action supports the following parameters:
 | `github-token`           | `${{ github.token }}`               | GitHub token (used to overcome GitHub rate limiting)                            |
 | `report-job-summary`     | `true`                              | Report results through job summary output                                       |
 | `report-process-tree`    | `false`                             | Enable to report the process tree                                               |
-| `report-artifact-log`    | `true`                              | Report results through artifact                                                 |
+| `report-artifact-log`    | `true`                              | Report logs through job artifact                                                |
 | `slack-webhook-endpoint` |                                     | Slack webhook endpoint to report security events                                |
 | `apply-fs-events`        | `false`                             | Enable processing filesystem events and display them in the process tree report |
 | `docker-image`           | `docker.io/cycodelabs/cimon:v0.3.4` | Docker image reference                                                          |
