@@ -7,7 +7,7 @@ import poll from "../poll/poll.js";
 function getActionConfig() {
     return {
         job: process.env.GITHUB_JOB,
-        createArtifact: true,
+        createArtifact: core.getBooleanInput('report-artifact-log'),
     };
 }
 

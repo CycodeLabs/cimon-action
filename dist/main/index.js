@@ -4138,6 +4138,7 @@ function getActionConfig() {
 
     const reportJobSummary = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-job-summary');
     const reportProcessTree = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-process-tree');
+    const reportArtifactLog = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-artifact-log');
     const slackWebhookEndpoint = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('slack-webhook-endpoint');
     const featureGates = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getMultilineInput('feature-gates');
 
@@ -4164,6 +4165,7 @@ function getActionConfig() {
         report: {
             jobSummary: reportJobSummary,
             processTree: reportProcessTree,
+            artifactLog: reportArtifactLog,
             slackWebhookEndpoint: slackWebhookEndpoint,
         },
     };
@@ -4249,6 +4251,7 @@ async function run(config) {
         args.push('--env', `CIMON_FEATURE_GATES=${config.cimon.featureGates}`);
     }
 
+    
     args.push(config.docker.image);
 
     const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('docker', args, {
