@@ -22,6 +22,7 @@ function getActionConfig() {
 
     const reportJobSummary = core.getBooleanInput('report-job-summary');
     const reportProcessTree = core.getBooleanInput('report-process-tree');
+    const reportArtifactLog = core.getBooleanInput('report-artifact-log');
     const slackWebhookEndpoint = core.getInput('slack-webhook-endpoint');
     const featureGates = core.getMultilineInput('feature-gates');
 
@@ -48,6 +49,7 @@ function getActionConfig() {
         report: {
             jobSummary: reportJobSummary,
             processTree: reportProcessTree,
+            artifactLog: reportArtifactLog,
             slackWebhookEndpoint: slackWebhookEndpoint,
         },
     };
@@ -133,6 +135,7 @@ async function run(config) {
         args.push('--env', `CIMON_FEATURE_GATES=${config.cimon.featureGates}`);
     }
 
+    
     args.push(config.docker.image);
 
     const exitCode = await exec.exec('docker', args, {
