@@ -30,7 +30,7 @@ inputs:
     required: false
     default: "false"
   report-artifact-log:
-    description: Report results through artifact
+    description: Report logs through job artifact
     required: false
     default: "true"
   slack-webhook-endpoint:
