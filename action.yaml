@@ -1,5 +1,9 @@
-name: Cimon JavaScript Action
-description: Monitor a job execution with Cimon
+name: Cimon Security Action
+description: CI/CD Runtime Security Agent for GitHub Actions
+branding:
+  icon: shield
+  color: green
+author: CycodeLabs
 inputs:
   client-id:
     description: Cimon client ID for authentication
