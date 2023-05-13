@@ -63,10 +63,11 @@ try {
     await run(getActionConfig());
 } catch (error) {
     const failOnError = core.getBooleanInput('fail-on-error');
+    const reportJobSummary = core.getBooleanInput('report-job-summary');
     const log = error.message;
     if (failOnError) {
         core.setFailed(log);
-    } else {
+    } else if (reportJobSummary) {
         await core.summary
             .addHeading('Cimon Security Report - Failure')
             .addRaw('Cimon encountered an error and was shut down due to the "fail-on-error=false" flag. Details of the error are below:')
