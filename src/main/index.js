@@ -10,6 +10,7 @@ function getActionConfig() {
     const dockerPassword = core.getInput('docker-password');
 
     const token = core.getInput('github-token');
+    const reportJobSummary = core.getBooleanInput('report-job-summary');
 
     const logLevel = core.getInput('log-level');
     const preventionMode = core.getBooleanInput('prevent');
@@ -20,9 +21,7 @@ function getActionConfig() {
     const clientId = core.getInput('client-id');
     const secret = core.getInput('secret');
 
-    const reportJobSummary = core.getBooleanInput('report-job-summary');
     const reportProcessTree = core.getBooleanInput('report-process-tree');
-    const reportArtifactLog = core.getBooleanInput('report-artifact-log');
     const slackWebhookEndpoint = core.getInput('slack-webhook-endpoint');
     const featureGates = core.getMultilineInput('feature-gates');
 
@@ -35,6 +34,7 @@ function getActionConfig() {
         },
         github: {
             token: token,
+            jobSummary: reportJobSummary,
         },
         cimon: {
             logLevel: logLevel,
@@ -47,9 +47,7 @@ function getActionConfig() {
             featureGates: featureGates,
         },
         report: {
-            jobSummary: reportJobSummary,
             processTree: reportProcessTree,
-            artifactLog: reportArtifactLog,
             slackWebhookEndpoint: slackWebhookEndpoint,
         },
     };
@@ -103,11 +101,9 @@ async function run(config) {
 
     if (config.cimon.allowedHosts !== "") {
         args.push('--env', `CIMON_ALLOWED_HOSTS=${config.cimon.allowedHosts}`);
-        // TODO Remove the CIMON_ALLOWED_DOMAIN_NAMES setting when we upgrade the default image used by this action.
-        args.push('--env', `CIMON_ALLOWED_DOMAIN_NAMES=${config.cimon.allowedHosts}`);
     }
 
-    if (config.report.jobSummary) {
+    if (config.github.jobSummary) {
         args.push('--env', 'CIMON_REPORT_GITHUB_JOB_SUMMARY=1');
     }
 
@@ -135,7 +131,7 @@ async function run(config) {
         args.push('--env', `CIMON_FEATURE_GATES=${config.cimon.featureGates}`);
     }
 
-    
+
     args.push(config.docker.image);
 
     const exitCode = await exec.exec('docker', args, {
