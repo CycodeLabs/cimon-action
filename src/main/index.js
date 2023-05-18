@@ -3,6 +3,9 @@ import exec from '@actions/exec';
 import docker from '../docker/docker.js';
 import poll from '../poll/poll.js';
 
+const MODE_DETECT = "detect";
+const MODE_PROTECT = "protect";
+
 function getActionConfig() {
     const dockerImage = core.getInput('docker-image');
     const dockerImagePull = core.getBooleanInput('docker-image-pull');
@@ -13,7 +16,15 @@ function getActionConfig() {
     const reportJobSummary = core.getBooleanInput('report-job-summary');
 
     const logLevel = core.getInput('log-level');
-    const preventionMode = core.getBooleanInput('prevent');
+    let mode = core.getInput("mode");
+
+    // If the workflow is still using deprecated input to enable prevent mode
+    // instead of the mode input, we should respect its value.
+    const prevent = core.getBooleanInput('prevent');
+    if (prevent === true && mode === MODE_DETECT) {
+      mode = MODE_PROTECT;
+    }
+
     const allowedIPs = core.getInput('allowed-ips');
     const allowedHosts = core.getInput('allowed-hosts');
 
@@ -38,7 +49,7 @@ function getActionConfig() {
         },
         cimon: {
             logLevel: logLevel,
-            preventionMode: preventionMode,
+            mode: mode,
             allowedIPs: allowedIPs,
             allowedHosts: allowedHosts,
             applyFsEvents: applyFsEvents,
@@ -91,7 +102,7 @@ async function run(config) {
         '--env', `RUNNER_OS`,
     ];
 
-    if (config.cimon.preventionMode) {
+    if (config.cimon.mode === MODE_PROTECT) {
         args.push('--env', 'CIMON_PREVENT=1');
     }
 

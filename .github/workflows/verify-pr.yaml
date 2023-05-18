@@ -26,9 +26,9 @@ jobs:
         with:
           client-id: ${{ secrets.CIMON_CLIENT_ID }}
           secret: ${{ secrets.CIMON_SECRET }}
-          prevent: true
+          mode: protect
           allowed-hosts: >
-            cycode.com,
+            cycode.com
             registry.npmjs.org
 
       - name: Test

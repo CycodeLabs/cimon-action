@@ -11,9 +11,14 @@ inputs:
   secret:
     description: Cimon secret for authentication
     required: false
+  mode:
+    description: Mode in which the action is run [detect|prevent]
+    required: true
+    default: "detect"
   prevent:
     description: Enable prevention mode
-    required: true
+    deprecationMessage: Use mode input instead
+    required: false
     default: "false"
   allowed-ips:
     description: A comma-separated list of allowed IP addresses

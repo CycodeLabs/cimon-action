@@ -4119,6 +4119,9 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 
 
 
+const MODE_DETECT = "detect";
+const MODE_PROTECT = "protect";
+
 function getActionConfig() {
     const dockerImage = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('docker-image');
     const dockerImagePull = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('docker-image-pull');
@@ -4126,9 +4129,18 @@ function getActionConfig() {
     const dockerPassword = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('docker-password');
 
     const token = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('github-token');
+    const reportJobSummary = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-job-summary');
 
     const logLevel = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('log-level');
-    const preventionMode = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('prevent');
+    let mode = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput("mode");
+
+    // If the workflow is still using deprecated input to enable prevent mode
+    // instead of the mode input, we should respect its value.
+    const prevent = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('prevent');
+    if (prevent === true && mode === MODE_DETECT) {
+      mode = MODE_PROTECT;
+    }
+
     const allowedIPs = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('allowed-ips');
     const allowedHosts = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('allowed-hosts');
 
@@ -4136,9 +4148,7 @@ function getActionConfig() {
     const clientId = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('client-id');
     const secret = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('secret');
 
-    const reportJobSummary = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-job-summary');
     const reportProcessTree = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-process-tree');
-    const reportArtifactLog = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-artifact-log');
     const slackWebhookEndpoint = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('slack-webhook-endpoint');
     const featureGates = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getMultilineInput('feature-gates');
 
@@ -4151,10 +4161,11 @@ function getActionConfig() {
         },
         github: {
             token: token,
+            jobSummary: reportJobSummary,
         },
         cimon: {
             logLevel: logLevel,
-            preventionMode: preventionMode,
+            mode: mode,
             allowedIPs: allowedIPs,
             allowedHosts: allowedHosts,
             applyFsEvents: applyFsEvents,
@@ -4163,9 +4174,7 @@ function getActionConfig() {
             featureGates: featureGates,
         },
         report: {
-            jobSummary: reportJobSummary,
             processTree: reportProcessTree,
-            artifactLog: reportArtifactLog,
             slackWebhookEndpoint: slackWebhookEndpoint,
         },
     };
@@ -4209,7 +4218,7 @@ async function run(config) {
         '--env', `RUNNER_OS`,
     ];
 
-    if (config.cimon.preventionMode) {
+    if (config.cimon.mode === MODE_PROTECT) {
         args.push('--env', 'CIMON_PREVENT=1');
     }
 
@@ -4219,11 +4228,9 @@ async function run(config) {
 
     if (config.cimon.allowedHosts !== "") {
         args.push('--env', `CIMON_ALLOWED_HOSTS=${config.cimon.allowedHosts}`);
-        // TODO Remove the CIMON_ALLOWED_DOMAIN_NAMES setting when we upgrade the default image used by this action.
-        args.push('--env', `CIMON_ALLOWED_DOMAIN_NAMES=${config.cimon.allowedHosts}`);
     }
 
-    if (config.report.jobSummary) {
+    if (config.github.jobSummary) {
         args.push('--env', 'CIMON_REPORT_GITHUB_JOB_SUMMARY=1');
     }
 
@@ -4251,7 +4258,7 @@ async function run(config) {
         args.push('--env', `CIMON_FEATURE_GATES=${config.cimon.featureGates}`);
     }
 
-    
+
     args.push(config.docker.image);
 
     const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('docker', args, {

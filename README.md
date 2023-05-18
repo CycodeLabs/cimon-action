@@ -14,33 +14,34 @@ In order to integrate Cimon with GitHub, simply introduce the action in your Git
 steps:
   - uses: cycodelabs/cimon-action@v0
     with:
-      prevent: true
-      allowed-ips: ...
-      allowed-hosts: ...
+      mode: protect
+      allowed-hosts: >
+        codecov.io
+        uploader.codecov.io
 ```
 
 ## Usage
 
 The action supports the following parameters:
 
-| Name                     | Default                             | Description                                                                                                                                                                 |
-|--------------------------|-------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `client-id`              |                                     | Cimon client ID for authentication                                                                                                                                          |
-| `secret`                 |                                     | Cimon secret for authentication                                                                                                                                             |
-| `prevent`                | `false`                             | Enable prevention mode                                                                                                                                                      |
-| `allowed-ips`            |                                     | A comma or white space separated list of allowed IP addresses                                                                                                               |
-| `allowed-hosts`          |                                     | A comma or white space separated list of allowed domain names. The left-most label can be the wildcard character (`*`) to match multiple subdomains (e.g. `*.example.com`). |
-| `github-token`           | `${{ github.token }}`               | GitHub token (used to overcome GitHub rate limiting)                                                                                                                        |
-| `report-job-summary`     | `true`                              | Report results through job summary output                                                                                                                                   |
-| `report-process-tree`    | `false`                             | Enable to report the process tree                                                                                                                                           |
-| `report-artifact-log`    | `true`                              | Report logs through job artifact                                                                                                                                            |
-| `slack-webhook-endpoint` |                                     | Slack webhook endpoint to report security events                                                                                                                            |
-| `apply-fs-events`        | `false`                             | Enable processing filesystem events and display them in the process tree report                                                                                             |
-| `docker-image`           | `docker.io/cycodelabs/cimon:v0.5.0` | Docker image reference                                                                                                                                                      |
-| `docker-image-pull`      | `false`                             | Skip pulling image from registry (Used for debugging)                                                                                                                       |
-| `docker-username`        | `false`                             | Username to pull image from registry (Used for debugging)                                                                                                                   |
-| `docker-password`        | `false`                             | Password to pull image from registry (Used for debugging)                                                                                                                   |
-| `log-level`              | `info`                              | Log level (Used for debugging)                                                                                                                                              |
+| Name                     | Default                             | Description                                                                                                                                                                   |
+|--------------------------|-------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `mode`                   | `detect`                            | Mode in which the action is run `[detect\|protect]`. In the `protect` mode Cimon will enforce egress network policy configured with `allowed-ips` and `allowed-hosts` inputs. |                                                                                                                          
+| `client-id`              |                                     | Cimon client ID for authentication                                                                                                                                            |
+| `secret`                 |                                     | Cimon secret for authentication                                                                                                                                               |
+| `allowed-ips`            |                                     | A comma or white space separated list of allowed IP addresses                                                                                                                 |
+| `allowed-hosts`          |                                     | A comma or white space separated list of allowed domain names. The left-most label can be the wildcard character (`*`) to match multiple subdomains (e.g. `*.example.com`).   |
+| `github-token`           | `${{ github.token }}`               | GitHub token (used to overcome GitHub rate limiting)                                                                                                                          |
+| `report-job-summary`     | `true`                              | Report results through job summary output                                                                                                                                     |
+| `report-process-tree`    | `false`                             | Enable to report the process tree                                                                                                                                             |
+| `report-artifact-log`    | `true`                              | Report logs through job artifact                                                                                                                                              |
+| `slack-webhook-endpoint` |                                     | Slack webhook endpoint to report security events                                                                                                                              |
+| `apply-fs-events`        | `false`                             | Enable processing filesystem events and display them in the process tree report                                                                                               |
+| `docker-image`           | `docker.io/cycodelabs/cimon:v0.5.0` | Docker image reference                                                                                                                                                        |
+| `docker-image-pull`      | `false`                             | Skip pulling image from registry (Used for debugging)                                                                                                                         |
+| `docker-username`        | `false`                             | Username to pull image from registry (Used for debugging)                                                                                                                     |
+| `docker-password`        | `false`                             | Password to pull image from registry (Used for debugging)                                                                                                                     |
+| `log-level`              | `info`                              | Log level (Used for debugging)                                                                                                                                                |
 
 ## Scenarios
 
@@ -51,13 +52,13 @@ steps:
   - uses: cycodelabs/cimon-action@v0
 ```
 
-### Running Cimon on prevent mode
+### Running Cimon on protect mode
 
 ``` yaml
 steps:
   - uses: cycodelabs/cimon-action@v0
     with:
-      prevent: true
+      mode: protect
       allowed-hosts: >
         cycode.com
 ```
@@ -68,6 +69,7 @@ steps:
 steps:
   - uses: cycodelabs/cimon-action@v0
     with:
+      mode: detect
       report-process-tree: true
       apply-fs-events: true
 ```
