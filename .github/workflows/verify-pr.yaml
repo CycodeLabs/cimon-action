@@ -28,8 +28,9 @@ jobs:
           secret: ${{ secrets.CIMON_SECRET }}
           prevent: true
           allowed-hosts: >
-            cycode.com,
+            cycode.com
             registry.npmjs.org
+          report-process-tree: true
 
       - name: Test
         run: |

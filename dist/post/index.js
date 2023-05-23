@@ -11023,10 +11023,11 @@ try {
     await run(getActionConfig());
 } catch (error) {
     const failOnError = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('fail-on-error');
+    const reportJobSummary = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-job-summary');
     const log = error.message;
     if (failOnError) {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.setFailed(log);
-    } else {
+    } else if (reportJobSummary) {
         await _actions_core__WEBPACK_IMPORTED_MODULE_0__.summary.addHeading('Cimon Security Report - Failure')
             .addRaw('Cimon encountered an error and was shut down due to the "fail-on-error=false" flag. Details of the error are below:')
             .addCodeBlock(log)
