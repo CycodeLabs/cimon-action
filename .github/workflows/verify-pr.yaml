@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout Code
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab  # v3.5.2
 
       - name: Run Cimon
         uses: ./
@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout Code
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab  # v3.5.2
 
       - name: Run Cimon
         uses: ./
@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout Code
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab  # v3.5.2
 
       - name: Run Cimon
         uses: ./
@@ -71,4 +71,3 @@ jobs:
         run: |
           curl -I https://cycode.com
           curl -I https://github.com
-    

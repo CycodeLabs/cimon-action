@@ -4132,6 +4132,7 @@ function getActionConfig() {
     const preventionMode = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('prevent');
     const allowedIPs = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('allowed-ips');
     const allowedHosts = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('allowed-hosts');
+    const ignoredIPNets = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('ignored-ip-nets');
 
     const applyFsEvents = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('apply-fs-events');
     const clientId = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('client-id');
@@ -4157,6 +4158,7 @@ function getActionConfig() {
             preventionMode: preventionMode,
             allowedIPs: allowedIPs,
             allowedHosts: allowedHosts,
+            ignoredIPNets: ignoredIPNets,
             applyFsEvents: applyFsEvents,
             clientId: clientId,
             secret: secret,
@@ -4217,6 +4219,10 @@ async function run(config) {
 
     if (config.cimon.allowedHosts !== "") {
         args.push('--env', `CIMON_ALLOWED_HOSTS=${config.cimon.allowedHosts}`);
+    }
+
+    if (config.cimon.ignoredIPNets !== "") {
+        args.push('--env', `CIMON_IGNORED_IP_NETS=${config.cimon.ignoredIPNets}`);
     }
 
     if (config.github.jobSummary) {

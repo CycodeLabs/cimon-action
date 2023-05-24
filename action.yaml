@@ -21,6 +21,15 @@ inputs:
   allowed-hosts:
     description: A comma-separated list of domain names
     required: false
+  ignored-ip-nets:
+    description: |
+      A comma or white space separated list of ignored IP networks in CIDR
+      notation, e.g. 10.0.0.0/8, 172.16.0.0/12. This setting is mandatory if
+      your workflow runs containers attached to a custom network with
+      configured sub-range. In other words, inter-container networking is
+      usually ignored by Cimon. Cimon implicitly ignores 10.0.0.0/8 and
+      172.16.0.0/12 networks.
+    required: false
   github-token:
     description: GitHub token (used to overcome GitHub rate limiting)
     required: false
