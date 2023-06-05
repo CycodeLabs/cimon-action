@@ -1,5 +1,5 @@
-name: Cimon Security Action
-description: CI/CD Runtime Security Agent for GitHub Actions
+name: Cimon by Cycode
+description: Runtime Security Solution for your CI/CD Pipeline
 branding:
   icon: shield
   color: green

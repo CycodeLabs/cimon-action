@@ -1,25 +1,33 @@
-# Secure your CI with Cimon
+# 🦫 Secure your CI with Cimon
 
-Cimon (pronounced "Simon") detects and stops software supply-chain attacks, including those targeting SolarWinds and CodeCov, through a developer-friendly experience.
+![](./pics/cimon-cover.png)
+
+[Cimon](https://cimon.build) (pronounced "Simon") is a runtime security solution that detects and stops software supply-chain attacks on your pipeline, including those targeting SolarWinds and CodeCov, through easy onboarding and a developer-friendly experience.
 
 By utilizing the revolutionary eBPF technology, Cimon monitors and mitigates attacks within the kernel, denying access to users' assets as soon as they arise.
 
+Get started by installing the [GitHub App](https://github.com/marketplace/cimon-by-cycode), or learn more in our docs section - https://docs.cimon.build.
+
 This action helps seamlessly deploy the agent into any desired GitHub Actions build. The action is based on the NodeJS engine and contains simple `pre` and `post` scripts to deploy and gracefully shut down the agent.
 
-## Getting Started
+## 🏃‍♂️ Getting Started with Cimon
 
-In order to integrate Cimon with GitHub, simply introduce the action in your GitHub Action workflow as follows:
+Here's a simple three-step process to begin securing your GitHub Actions pipeline:
+
+- Step 1 - Install Cimon [GitHub App](https://github.com/marketplace/cimon-by-cycode). You will be directed to the Cimon platform once the process is complete. 
+- Step 2 - Generate an API key in the Cimon Platform, which consists of a client ID and a secret. These keys are used to authenticate the user and should be securely stored as GitHub Actions secrets.
+- Step 3 - Add Cimon action to your workflow as the first step
+
+We recommend starting Cimon in “Detect Mode” to allow it to learn your environment before applying preventive policies.
 
 ``` yaml
-steps:
-  - uses: cycodelabs/cimon-action@v0
-    with:
-      prevent: true
-      allowed-ips: ...
-      allowed-hosts: ...
+- uses: cycodelabs/cimon-action@v0
+  with:
+    client-id: ${{ secrets.CIMON_CLIENT_ID }}
+    secret: ${{ secrets.CIMON_SECRET }}
 ```
 
-## Usage
+## 🔨 Usage
 
 The action supports the following parameters:
 
@@ -43,13 +51,16 @@ The action supports the following parameters:
 | `docker-password`        | `false`                             | Password to pull image from registry (Used for debugging)                                                                                                                                                                                                                                                                                                                 |
 | `log-level`              | `info`                              | Log level (Used for debugging)                                                                                                                                                                                                                                                                                                                                            |
 
-## Scenarios
+## ⚙️ Scenarios
 
 ### Running Cimon on detect mode
 
 ``` yaml
 steps:
   - uses: cycodelabs/cimon-action@v0
+    with:
+      client-id: ${{ secrets.CIMON_CLIENT_ID }}
+      secret: ${{ secrets.CIMON_SECRET }}
 ```
 
 ### Running Cimon on prevent mode
@@ -58,6 +69,8 @@ steps:
 steps:
   - uses: cycodelabs/cimon-action@v0
     with:
+      client-id: ${{ secrets.CIMON_CLIENT_ID }}
+      secret: ${{ secrets.CIMON_SECRET }}    
       prevent: true
       allowed-hosts: >
         cycode.com
@@ -69,10 +82,12 @@ steps:
 steps:
   - uses: cycodelabs/cimon-action@v0
     with:
+      client-id: ${{ secrets.CIMON_CLIENT_ID }}
+      secret: ${{ secrets.CIMON_SECRET }}
       report-process-tree: true
       apply-fs-events: true
 ```
-## Security Report
+## 🛡️ Security Report
 
 Each pipeline run will report its findings through a security report embedded within the pipeline summary in GitHub Actions. 
 
@@ -86,7 +101,7 @@ When the policy is set to "prevent", any security anomalies matching the profile
 
 ![](./pics/prevent-report.png)
 
-## Development
+## 🪚 Development
 
 Contributions to GitHub Action are welcome. After changes were made to the `src` folder, these changes should be reflected to the `dist` folder through the following build process:
 
@@ -103,6 +118,6 @@ The build script will update the actions' entry points code in the [dist](dist) 
 
 [ncc]: https://github.com/vercel/ncc
 
-## License
+## 🪪 License
 
 [Apache License 2.0](./LICENSE.md)
