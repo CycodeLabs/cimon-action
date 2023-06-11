@@ -4278,7 +4278,7 @@ async function run(config) {
         return state.Health;
     }, (health) => {
         return health.Status !== _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].CONTAINER_STATUS_HEALTHY */ .Z.CONTAINER_STATUS_HEALTHY;
-    }, 1000, 30 * 1000);
+    }, 1000, 45 * 1000);
 
     if (health.Status !== _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].CONTAINER_STATUS_HEALTHY */ .Z.CONTAINER_STATUS_HEALTHY) {
         const log = health.Log;
