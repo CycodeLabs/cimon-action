@@ -162,7 +162,7 @@ async function run(config) {
         return state.Health;
     }, (health) => {
         return health.Status !== docker.CONTAINER_STATUS_HEALTHY;
-    }, 1000, 30 * 1000);
+    }, 1000, 45 * 1000);
 
     if (health.Status !== docker.CONTAINER_STATUS_HEALTHY) {
         const log = health.Log;
