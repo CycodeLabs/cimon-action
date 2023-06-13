@@ -21,6 +21,14 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab  # v3.5.2
 
+      - name: 🐷 TruffleHog OSS
+        uses: trufflesecurity/trufflehog@v3.39.0
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --debug --only-verified
+
       - name: Run Cimon
         uses: ./
         with:
