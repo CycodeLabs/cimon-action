@@ -96,6 +96,7 @@ async function run(config) {
         '--env', `GITHUB_JOB`,
         '--env', `GITHUB_EVENT_NAME`,
         '--env', `GITHUB_RUN_ID`,
+        '--env', `GITHUB_RUN_ATTEMPT`,
         '--env', `RUNNER_ARCH`,
         '--env', `RUNNER_NAME`,
         '--env', `RUNNER_OS`,
