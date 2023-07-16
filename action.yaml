@@ -42,10 +42,6 @@ inputs:
     description: Enable to report the process tree
     required: false
     default: "false"
-  report-artifact-log:
-    description: Report logs through job artifact
-    required: false
-    default: "true"
   slack-webhook-endpoint:
     description: Slack webhook endpoint to report security events
     required: false
