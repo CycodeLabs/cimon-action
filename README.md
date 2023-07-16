@@ -27,6 +27,12 @@ We recommend starting Cimon in “Detect Mode” to allow it to learn your envir
     secret: ${{ secrets.CIMON_SECRET }}
 ```
 
+OR
+
+``` yaml
+- uses: cycodelabs/cimon-action@v0
+```
+
 ## 🔨 Usage
 
 The action supports the following parameters:
@@ -54,6 +60,13 @@ The action supports the following parameters:
 | `fail-on-error`          | `false`                             | Fail the CI if Cimon encountered an error                                                                                                                                                                                                                                                                                                                                 |
 
 ## ⚙️ Scenarios
+
+### Running Cimon locally
+
+``` yaml
+steps:
+  - uses: cycodelabs/cimon-action@v0
+```
 
 ### Running Cimon on detect mode
 
