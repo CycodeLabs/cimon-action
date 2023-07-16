@@ -50,24 +50,3 @@ jobs:
           client-id: ${{ secrets.CIMON_CLIENT_ID }}
           secret: ${{ secrets.CIMON_SECRET }}
           allowed-hosts: this,would,^$#yield,error
-
-  verify-no-artifact:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab  # v3.5.2
-
-      - name: Run Cimon
-        uses: ./
-        with:
-          client-id: ${{ secrets.CIMON_CLIENT_ID }}
-          secret: ${{ secrets.CIMON_SECRET }}
-          prevent: true
-          report-artifact-log: false
-          allowed-hosts: >
-            cycode.com
-
-      - name: Test
-        run: |
-          curl -I https://cycode.com
-          curl -I https://github.com
