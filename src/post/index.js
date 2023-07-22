@@ -35,6 +35,8 @@ async function run() {
         );
     }
 
+    await docker.removeContainer('cimon');
+
     core.info(`Build runtime security agent finished successfully`);
 }
 
