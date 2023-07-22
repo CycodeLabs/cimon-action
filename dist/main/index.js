@@ -4038,11 +4038,16 @@ async function getContainerState(containerName) {
         silent: true,
     };
 
-    const execOutput = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.getExecOutput("docker",
-        ["inspect", "--format={{json .State}}", containerName], options);
+    const execOutput = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.getExecOutput(
+        'docker',
+        ['inspect', '--format={{json .State}}', containerName],
+        options
+    );
 
     if (execOutput.exitCode !== 0) {
-        throw new Error(`Failed getting container state: ${containerName}: ${execOutput.exitCode}: ${execOutput.stderr}`);
+        throw new Error(
+            `Failed getting container state: ${containerName}: ${execOutput.exitCode}: ${execOutput.stderr}`
+        );
     }
 
     return JSON.parse(execOutput.stdout);
@@ -4052,20 +4057,43 @@ async function stopContainer(containerName) {
     const options = {
         silent: true,
     };
-    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec('docker', ['container', 'stop', containerName], options);
+    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec(
+        'docker',
+        ['container', 'stop', containerName],
+        options
+    );
     if (exitCode !== 0) {
         throw new Error(`Failed stopping container: ${containerName}`);
     }
 }
 
+async function removeContainer(containerName) {
+    const options = {
+        silent: true,
+    };
+    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec(
+        'docker',
+        ['container', 'rm', containerName],
+        options
+    );
+    if (exitCode !== 0) {
+        throw new Error(`Failed removing container: ${containerName}`);
+    }
+}
+
 async function getContainerLogs(containerName) {
     const execOutput = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.getExecOutput(
-        'docker', ['container', 'logs', containerName], {
+        'docker',
+        ['container', 'logs', containerName],
+        {
             silent: true,
             maxBuffer: 1024 * 1024 * 200,
-        });
+        }
+    );
     if (execOutput.exitCode !== 0) {
-        throw new Error(`Failed getting container logs: ${containerName}: ${execOutput.exitCode}: ${execOutput.stderr}`);
+        throw new Error(
+            `Failed getting container logs: ${containerName}: ${execOutput.exitCode}: ${execOutput.stderr}`
+        );
     }
     return {
         stderr: execOutput.stderr,
@@ -4077,7 +4105,11 @@ async function imagePull(image) {
     const options = {
         silent: true,
     };
-    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec('docker', ['image', 'pull', '--quiet', image], options);
+    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec(
+        'docker',
+        ['image', 'pull', '--quiet', image],
+        options
+    );
     if (exitCode !== 0) {
         throw new Error(`Docker image pull failed: ${exitCode}`);
     }
@@ -4087,7 +4119,11 @@ async function login(username, password) {
     const options = {
         silent: true,
     };
-    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec('docker', ['login', '--username', username, '--password', password], options);
+    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec(
+        'docker',
+        ['login', '--username', username, '--password', password],
+        options
+    );
     if (exitCode !== 0) {
         throw new Error(`Docker login failed: ${exitCode}`);
     }
@@ -4098,6 +4134,7 @@ async function login(username, password) {
     imagePull: imagePull,
     getContainerState: getContainerState,
     stopContainer: stopContainer,
+    removeContainer: removeContainer,
     getContainerLogs: getContainerLogs,
     CONTAINER_STATUS_HEALTHY: 'healthy',
     CONTAINER_STATUS_EXITED: 'exited',
@@ -4113,66 +4150,46 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(186);
 /* harmony import */ var _actions_exec__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(514);
 /* harmony import */ var _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(313);
-/* harmony import */ var _poll_poll_js__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(884);
+/* harmony import */ var _poll_poll_js__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(884);
+/* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(147);
+
 
 
 
 
 
 function getActionConfig() {
-    const dockerImage = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('docker-image');
-    const dockerImagePull = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('docker-image-pull');
-    const dockerUsername = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('docker-username');
-    const dockerPassword = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('docker-password');
-
-    const token = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('github-token');
-    const reportJobSummary = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-job-summary');
-
-    const logLevel = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('log-level');
-    const preventionMode = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('prevent');
-    const allowedIPs = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('allowed-ips');
-    const allowedHosts = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('allowed-hosts');
-    const ignoredIPNets = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('ignored-ip-nets');
-
-    const applyFsEvents = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('apply-fs-events');
-    const clientId = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('client-id');
-    const secret = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('secret');
-
-    const reportProcessTree = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-process-tree');
-    const slackWebhookEndpoint = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('slack-webhook-endpoint');
-    const featureGates = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getMultilineInput('feature-gates');
-
     return {
         docker: {
-            image: dockerImage,
-            imagePull: dockerImagePull,
-            username: dockerUsername,
-            password: dockerPassword,
+            image: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('docker-image'),
+            imagePull: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('docker-image-pull'),
+            username: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('docker-username'),
+            password: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('docker-password'),
         },
         github: {
-            token: token,
-            jobSummary: reportJobSummary,
+            token: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('github-token'),
+            jobSummary: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-job-summary'),
         },
         cimon: {
-            logLevel: logLevel,
-            preventionMode: preventionMode,
-            allowedIPs: allowedIPs,
-            allowedHosts: allowedHosts,
-            ignoredIPNets: ignoredIPNets,
-            applyFsEvents: applyFsEvents,
-            clientId: clientId,
-            secret: secret,
-            featureGates: featureGates,
+            logLevel: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('log-level'),
+            preventionMode: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('prevent'),
+            allowedIPs: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('allowed-ips'),
+            allowedHosts: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('allowed-hosts'),
+            ignoredIPNets: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('ignored-ip-nets'),
+            applyFsEvents: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('apply-fs-events'),
+            clientId: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('client-id'),
+            secret: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('secret'),
+            featureGates: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getMultilineInput('feature-gates'),
         },
         report: {
-            processTree: reportProcessTree,
-            slackWebhookEndpoint: slackWebhookEndpoint,
+            processTree: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-process-tree'),
+            slackWebhookEndpoint: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('slack-webhook-endpoint'),
         },
     };
 }
 
 async function run(config) {
-    if (config.docker.username !== "" && config.docker.password !== "") {
+    if (config.docker.username !== '' && config.docker.password !== '') {
         await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].login */ .Z.login(config.docker.username, config.docker.password);
     }
 
@@ -4180,58 +4197,55 @@ async function run(config) {
         await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].imagePull */ .Z.imagePull(config.docker.image);
     }
 
-    const args = ['container', 'run',
+    const envOutput = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.getExecOutput('env', [], {
+        silent: true,
+    });
+    if (envOutput.exitCode !== 0) {
+        throw new Error(
+            `Failed fetching environment variables: ${envOutput.exitCode}: ${envOutput.stderr}`
+        );
+    }
+    fs__WEBPACK_IMPORTED_MODULE_3__.writeFileSync('/tmp/.env', envOutput.stdout);
+
+    const args = [
+        'container',
+        'run',
         '--detach',
-        '--name', 'cimon',
+        '--name',
+        'cimon',
         '--privileged',
         '--pid=host',
         '--network=host',
         '--cgroupns=host',
-        '--volume', '/sys/kernel/debug:/sys/kernel/debug:ro',
-        '--volume', '/home/runner/work:/github_workspace',
-        '--env', `CIMON_LOG_LEVEL=${config.cimon.logLevel}`,
-        '--env', 'GITHUB_ACTIONS=true',
-        '--env', `GITHUB_TOKEN=${config.github.token}`,
-        '--env', `GITHUB_SHA`,
-        '--env', `GITHUB_REPOSITORY`,
-        '--env', `GITHUB_REPOSITORY_ID`,
-        '--env', `GITHUB_REPOSITORY_OWNER`,
-        '--env', `GITHUB_REPOSITORY_OWNER_ID`,
-        '--env', `GITHUB_WORKFLOW`,
-        '--env', `GITHUB_WORKFLOW_REF`,
-        '--env', `GITHUB_WORKFLOW_SHA`,
-        '--env', `GITHUB_REF`,
-        '--env', `GITHUB_REF_NAME`,
-        '--env', `GITHUB_REF_PROTECTED`,
-        '--env', `GITHUB_REF_TYPE`,
-        '--env', `GITHUB_BASE_REF`,
-        '--env', `GITHUB_HEAD_REF`,
-        '--env', `GITHUB_ACTOR`,
-        '--env', `GITHUB_ACTOR_ID`,
-        '--env', `GITHUB_TRIGGERING_ACTOR`,
-        '--env', `GITHUB_JOB`,
-        '--env', `GITHUB_EVENT_NAME`,
-        '--env', `GITHUB_RUN_ID`,
-        '--env', `GITHUB_RUN_ATTEMPT`,
-        '--env', `RUNNER_ARCH`,
-        '--env', `RUNNER_NAME`,
-        '--env', `RUNNER_OS`,
+        '--volume',
+        '/sys/kernel/debug:/sys/kernel/debug:ro',
+        '--volume',
+        '/home/runner/work:/github_workspace',
+        '--env',
+        `CIMON_LOG_LEVEL=${config.cimon.logLevel}`,
+        '--env',
+        `GITHUB_TOKEN=${config.github.token}`,
+        '--env-file',
+        `/tmp/.env`,
     ];
 
     if (config.cimon.preventionMode) {
         args.push('--env', 'CIMON_PREVENT=1');
     }
 
-    if (config.cimon.allowedIPs !== "") {
+    if (config.cimon.allowedIPs !== '') {
         args.push('--env', `CIMON_ALLOWED_IPS=${config.cimon.allowedIPs}`);
     }
 
-    if (config.cimon.allowedHosts !== "") {
+    if (config.cimon.allowedHosts !== '') {
         args.push('--env', `CIMON_ALLOWED_HOSTS=${config.cimon.allowedHosts}`);
     }
 
-    if (config.cimon.ignoredIPNets !== "") {
-        args.push('--env', `CIMON_IGNORED_IP_NETS=${config.cimon.ignoredIPNets}`);
+    if (config.cimon.ignoredIPNets !== '') {
+        args.push(
+            '--env',
+            `CIMON_IGNORED_IP_NETS=${config.cimon.ignoredIPNets}`
+        );
     }
 
     if (config.github.jobSummary) {
@@ -4243,25 +4257,27 @@ async function run(config) {
     }
 
     if (config.report.slackWebhookEndpoint) {
-        args.push('--env', `CIMON_SLACK_WEBHOOK_ENDPOINT=${config.report.slackWebhookEndpoint}`);
+        args.push(
+            '--env',
+            `CIMON_SLACK_WEBHOOK_ENDPOINT=${config.report.slackWebhookEndpoint}`
+        );
     }
 
     if (config.cimon.applyFsEvents) {
         args.push('--env', 'CIMON_APPLY_FS_EVENTS=1');
     }
 
-    if (config.cimon.clientId !== "") {
+    if (config.cimon.clientId !== '') {
         args.push('--env', `CIMON_CLIENT_ID=${config.cimon.clientId}`);
     }
 
-    if (config.cimon.secret !== "") {
+    if (config.cimon.secret !== '') {
         args.push('--env', `CIMON_SECRET=${config.cimon.secret}`);
     }
 
-    if (config.cimon.featureGates !== "") {
+    if (config.cimon.featureGates !== '') {
         args.push('--env', `CIMON_FEATURE_GATES=${config.cimon.featureGates}`);
     }
-
 
     args.push(config.docker.image);
 
@@ -4270,20 +4286,32 @@ async function run(config) {
     });
 
     if (exitCode !== 0) {
-        throw new Error('Failed executing docker run command for Cimon container');
+        throw new Error(
+            'Failed executing docker run command for Cimon container'
+        );
     }
 
-    const health = await (0,_poll_poll_js__WEBPACK_IMPORTED_MODULE_3__/* ["default"] */ .Z)(async () => {
-        const state = await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].getContainerState */ .Z.getContainerState('cimon');
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__.debug(`Checking Cimon health status: ${state.Health.Status} ...`);
-        return state.Health;
-    }, (health) => {
-        return health.Status !== _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].CONTAINER_STATUS_HEALTHY */ .Z.CONTAINER_STATUS_HEALTHY;
-    }, 1000, 45 * 1000);
+    fs__WEBPACK_IMPORTED_MODULE_3__.unlinkSync('/tmp/.env');
+
+    const health = await (0,_poll_poll_js__WEBPACK_IMPORTED_MODULE_4__/* ["default"] */ .Z)(
+        async () => {
+            const state = await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].getContainerState */ .Z.getContainerState('cimon');
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.debug(
+                `Checking Cimon health status: ${state.Health.Status} ...`
+            );
+            return state.Health;
+        },
+        (health) => {
+            return health.Status !== _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].CONTAINER_STATUS_HEALTHY */ .Z.CONTAINER_STATUS_HEALTHY;
+        },
+        1000,
+        45 * 1000
+    );
 
     if (health.Status !== _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].CONTAINER_STATUS_HEALTHY */ .Z.CONTAINER_STATUS_HEALTHY) {
         const log = health.Log;
-        let message = 'Failed reaching healthy container status for Cimon container';
+        let message =
+            'Failed reaching healthy container status for Cimon container';
         if (Array.isArray(log) && log.length > 0) {
             const latestEntry = log[0];
             message += `: exit code: ${latestEntry.ExitCode}: ${latestEntry.Output}`;
@@ -4291,7 +4319,9 @@ async function run(config) {
         throw new Error(message);
     }
 
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Build runtime security agent started successfully: ${config.docker.image}`);
+    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(
+        `Build runtime security agent started successfully: ${config.docker.image}`
+    );
 }
 
 try {
@@ -4303,6 +4333,7 @@ try {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.setFailed(log);
     }
 }
+
 __webpack_handle_async_dependencies__();
 }, 1);
 

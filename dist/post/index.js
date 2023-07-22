@@ -4038,11 +4038,16 @@ async function getContainerState(containerName) {
         silent: true,
     };
 
-    const execOutput = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.getExecOutput("docker",
-        ["inspect", "--format={{json .State}}", containerName], options);
+    const execOutput = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.getExecOutput(
+        'docker',
+        ['inspect', '--format={{json .State}}', containerName],
+        options
+    );
 
     if (execOutput.exitCode !== 0) {
-        throw new Error(`Failed getting container state: ${containerName}: ${execOutput.exitCode}: ${execOutput.stderr}`);
+        throw new Error(
+            `Failed getting container state: ${containerName}: ${execOutput.exitCode}: ${execOutput.stderr}`
+        );
     }
 
     return JSON.parse(execOutput.stdout);
@@ -4052,20 +4057,43 @@ async function stopContainer(containerName) {
     const options = {
         silent: true,
     };
-    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec('docker', ['container', 'stop', containerName], options);
+    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec(
+        'docker',
+        ['container', 'stop', containerName],
+        options
+    );
     if (exitCode !== 0) {
         throw new Error(`Failed stopping container: ${containerName}`);
     }
 }
 
+async function removeContainer(containerName) {
+    const options = {
+        silent: true,
+    };
+    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec(
+        'docker',
+        ['container', 'rm', containerName],
+        options
+    );
+    if (exitCode !== 0) {
+        throw new Error(`Failed removing container: ${containerName}`);
+    }
+}
+
 async function getContainerLogs(containerName) {
     const execOutput = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.getExecOutput(
-        'docker', ['container', 'logs', containerName], {
+        'docker',
+        ['container', 'logs', containerName],
+        {
             silent: true,
             maxBuffer: 1024 * 1024 * 200,
-        });
+        }
+    );
     if (execOutput.exitCode !== 0) {
-        throw new Error(`Failed getting container logs: ${containerName}: ${execOutput.exitCode}: ${execOutput.stderr}`);
+        throw new Error(
+            `Failed getting container logs: ${containerName}: ${execOutput.exitCode}: ${execOutput.stderr}`
+        );
     }
     return {
         stderr: execOutput.stderr,
@@ -4077,7 +4105,11 @@ async function imagePull(image) {
     const options = {
         silent: true,
     };
-    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec('docker', ['image', 'pull', '--quiet', image], options);
+    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec(
+        'docker',
+        ['image', 'pull', '--quiet', image],
+        options
+    );
     if (exitCode !== 0) {
         throw new Error(`Docker image pull failed: ${exitCode}`);
     }
@@ -4087,7 +4119,11 @@ async function login(username, password) {
     const options = {
         silent: true,
     };
-    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec('docker', ['login', '--username', username, '--password', password], options);
+    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec(
+        'docker',
+        ['login', '--username', username, '--password', password],
+        options
+    );
     if (exitCode !== 0) {
         throw new Error(`Docker login failed: ${exitCode}`);
     }
@@ -4098,6 +4134,7 @@ async function login(username, password) {
     imagePull: imagePull,
     getContainerState: getContainerState,
     stopContainer: stopContainer,
+    removeContainer: removeContainer,
     getContainerLogs: getContainerLogs,
     CONTAINER_STATUS_HEALTHY: 'healthy',
     CONTAINER_STATUS_EXITED: 'exited',
@@ -4188,6 +4225,8 @@ async function run() {
             `Container exited with error: ${containerState.ExitCode}`
         );
     }
+
+    await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].removeContainer */ .Z.removeContainer('cimon');
 
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Build runtime security agent finished successfully`);
 }
