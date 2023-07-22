@@ -4220,7 +4220,7 @@ async function run(config) {
         '--volume',
         '/sys/kernel/debug:/sys/kernel/debug:ro',
         '--volume',
-        '/home/runner/work:/github_workspace',
+        `${process.env['RUNNER_TEMP']}:/github_workspace/_temp`,
         '--env',
         `CIMON_LOG_LEVEL=${config.cimon.logLevel}`,
         '--env',
