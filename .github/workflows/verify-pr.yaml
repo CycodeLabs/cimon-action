@@ -31,6 +31,7 @@ jobs:
             cycode.com
             registry.npmjs.org
           report-process-tree: true
+          fail-on-error: true
 
       - name: Test
         run: |
