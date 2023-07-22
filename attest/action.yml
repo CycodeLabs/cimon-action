@@ -1,0 +1,62 @@
+name: Cimon by Cycode
+description: Runtime Security Solution for your CI/CD Pipeline
+branding:
+  icon: shield
+  color: green
+author: CycodeLabs
+inputs:
+  client-id:
+    description: Cimon client ID for authentication
+    required: false
+  secret:
+    description: Cimon secret for authentication
+    required: false
+  url:
+    description: Cimon endpoint for authentication
+    required: false
+  releasePath:
+    description: Path to Cimon release file (Used for debugging)
+    required: false
+    default: ""
+  subjects:
+    description: Base64-encoded subjects to generate provenance for
+    required: true
+  imageRef:
+    description: The container reference to generate provenance for
+    required: false
+    default: ""
+  signKey:
+    description: Input path to a private ECDSA/RSA key used to sign provenance statement
+    required: true
+  provenanceOutput:
+    description: Provenance output path. Can be absolute path, or relative path to the default working directory
+    required: false
+    default: "provenance.intoto.jsonl"
+  signedProvenanceOutput:
+    description: Signed provenance output path. Can be absolute path, or relative path to the default working directory
+    required: false
+    default: "provenance.intoto.jsonl.sig"
+  githubContext:
+    description: Information about the workflow run
+    required: false
+    default: ""
+  reportJobSummary:
+    description: Enable to report the provenance documents as job summary output
+    required: false
+    default: "true"
+  reportArtifact:
+    description: Enable to report the provenance documents as job artifacts
+    required: false
+    default: "true"
+  log-level:
+    description: Log level (Used for debugging)
+    required: false
+    default: "info"
+  fail-on-error:
+    description: Fail the CI if Cimon encountered an error
+    required: false
+    default: "false"
+
+runs:
+  using: node16
+  main: "dist/index.js"
