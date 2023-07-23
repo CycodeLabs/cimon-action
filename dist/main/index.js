@@ -4197,6 +4197,7 @@ async function run(config) {
         await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].imagePull */ .Z.imagePull(config.docker.image);
     }
 
+    delete process.env.GITHUB_ACTIONS;
     const envOutput = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.getExecOutput('env', [], {
         silent: true,
     });
@@ -4227,6 +4228,8 @@ async function run(config) {
         `GITHUB_TOKEN=${config.github.token}`,
         '--env-file',
         `/tmp/.env`,
+        '--env',
+        'CIMON_REPORT_PROCESS_TREE=1',
     ];
 
     if (config.cimon.preventionMode) {

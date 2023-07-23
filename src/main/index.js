@@ -43,6 +43,7 @@ async function run(config) {
         await docker.imagePull(config.docker.image);
     }
 
+    delete process.env.GITHUB_ACTIONS;
     const envOutput = await exec.getExecOutput('env', [], {
         silent: true,
     });
@@ -73,6 +74,8 @@ async function run(config) {
         `GITHUB_TOKEN=${config.github.token}`,
         '--env-file',
         `/tmp/.env`,
+        '--env',
+        'CIMON_REPORT_PROCESS_TREE=1',
     ];
 
     if (config.cimon.preventionMode) {
