@@ -47,7 +47,6 @@ async function run(config) {
 
     const options = {
         env,
-        silent: true,
     };
     
     const scriptPath = path.join(__dirname, 'attest.sh');

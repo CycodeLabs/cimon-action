@@ -10871,7 +10871,6 @@ async function run(config) {
 
     const options = {
         env,
-        silent: true,
     };
     
     const scriptPath = __nccwpck_require__.ab + "attest.sh";
