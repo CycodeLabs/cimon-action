@@ -7,23 +7,23 @@ import path from 'path';
 function getActionConfig() {
     return {
         cimon: {
-            logLevel: core.getInput('logLevel'),
-            clientId: core.getInput('clientId'),
+            logLevel: core.getInput('log-level'),
+            clientId: core.getInput('client-id'),
             secret: core.getInput('secret'),
             url: core.getInput('url'),
-            releasePath: core.getInput('releasePath'),
+            releasePath: core.getInput('release-path'),
         },
         attest: {
             subjects: core.getInput('subjects'),
-            imageRef: core.getInput('imageRef'),
-            signKey: core.getInput('signKey'),
-            provenanceOutput: core.getInput('provenanceOutput'),
-            signedProvenanceOutput: core.getInput('signedProvenanceOutput'),
-            githubContext: core.getInput('githubContext'),
+            imageRef: core.getInput('image-ref'),
+            signKey: core.getInput('sign-key'),
+            provenanceOutput: core.getInput('provenance-output'),
+            signedProvenanceOutput: core.getInput('signed-provenance-output'),
+            githubContext: core.getInput('github-context'),
         },
         report: {
-            reportJobSummary: core.getBooleanInput('reportJobSummary'),
-            reportArtifact: core.getBooleanInput('reportArtifact'),
+            reportJobSummary: core.getBooleanInput('report-job-summary'),
+            reportArtifact: core.getBooleanInput('report-artifact'),
         }
     };
 }
@@ -59,7 +59,9 @@ async function run(config) {
 
     if (config.report.reportArtifact) {
         artifact.create().uploadArtifact('Cimon-provenance', [config.attest.provenanceOutput], path.dirname(config.attest.provenanceOutput), {continueOnError: true})
-        artifact.create().uploadArtifact('Cimon-signed-provenance', [config.attest.signedProvenanceOutput], path.dirname(config.attest.signedProvenanceOutput), {continueOnError: true})
+        if (config.attest.signKey != '') {
+            artifact.create().uploadArtifact('Cimon-signed-provenance', [config.attest.signedProvenanceOutput], path.dirname(config.attest.signedProvenanceOutput), {continueOnError: true})
+        }
     }
 
     core.info(`Build runtime SLSA provenance finished successfully`);

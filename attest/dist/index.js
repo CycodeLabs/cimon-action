@@ -10831,23 +10831,23 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 function getActionConfig() {
     return {
         cimon: {
-            logLevel: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('logLevel'),
-            clientId: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('clientId'),
+            logLevel: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('log-level'),
+            clientId: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('client-id'),
             secret: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('secret'),
             url: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('url'),
-            releasePath: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('releasePath'),
+            releasePath: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('release-path'),
         },
         attest: {
             subjects: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('subjects'),
-            imageRef: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('imageRef'),
-            signKey: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('signKey'),
-            provenanceOutput: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('provenanceOutput'),
-            signedProvenanceOutput: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('signedProvenanceOutput'),
-            githubContext: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('githubContext'),
+            imageRef: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('image-ref'),
+            signKey: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('sign-key'),
+            provenanceOutput: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('provenance-output'),
+            signedProvenanceOutput: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('signed-provenance-output'),
+            githubContext: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('github-context'),
         },
         report: {
-            reportJobSummary: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('reportJobSummary'),
-            reportArtifact: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('reportArtifact'),
+            reportJobSummary: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-job-summary'),
+            reportArtifact: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-artifact'),
         }
     };
 }
@@ -10883,7 +10883,9 @@ async function run(config) {
 
     if (config.report.reportArtifact) {
         _actions_artifact__WEBPACK_IMPORTED_MODULE_2__.create().uploadArtifact('Cimon-provenance', [config.attest.provenanceOutput], path__WEBPACK_IMPORTED_MODULE_3__.dirname(config.attest.provenanceOutput), {continueOnError: true})
-        _actions_artifact__WEBPACK_IMPORTED_MODULE_2__.create().uploadArtifact('Cimon-signed-provenance', [config.attest.signedProvenanceOutput], path__WEBPACK_IMPORTED_MODULE_3__.dirname(config.attest.signedProvenanceOutput), {continueOnError: true})
+        if (config.attest.signKey != '') {
+            _actions_artifact__WEBPACK_IMPORTED_MODULE_2__.create().uploadArtifact('Cimon-signed-provenance', [config.attest.signedProvenanceOutput], path__WEBPACK_IMPORTED_MODULE_3__.dirname(config.attest.signedProvenanceOutput), {continueOnError: true})
+        }
     }
 
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Build runtime SLSA provenance finished successfully`);
