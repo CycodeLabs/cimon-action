@@ -13,6 +13,9 @@ function getActionConfig() {
             url: core.getInput('url'),
             releasePath: core.getInput('release-path'),
         },
+        github: {
+            token: core.getInput('github-token'),
+        },
         attest: {
             subjects: core.getInput('subjects'),
             imageRef: core.getInput('image-ref'),
@@ -43,6 +46,7 @@ async function run(config) {
         CIMON_REPORT_JOB_SUMMARY: config.report.reportJobSummary,
         CIMON_REPORT_ARTIFACT: "false",
         GITHUB_CONTEXT: config.attest.githubContext,
+        GITHUB_TOKEN: config.github.token,
     };
 
     const options = {

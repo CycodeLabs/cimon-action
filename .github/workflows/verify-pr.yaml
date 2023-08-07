@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout Code
-        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab  # v3.5.2
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
 
       - name: Run Cimon
         uses: ./
@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout Code
-        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab  # v3.5.2
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
 
       - name: Run Cimon
         uses: ./
@@ -51,22 +51,22 @@ jobs:
           client-id: ${{ secrets.CIMON_CLIENT_ID }}
           secret: ${{ secrets.CIMON_SECRET }}
           allowed-hosts: this,would,^$#yield,error
-  
+
   verify-provenance:
     runs-on: ubuntu-22.04
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab  # v3.5.2
+      - name: Checkout Code
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
 
-    - name: Create Private Key
-      run: |
-        openssl genrsa -out private-key.pem 3072
+      - name: Create Private Key
+        run: |
+          openssl genrsa -out private-key.pem 3072
 
-    - name: Run Cimon
-      uses: ./attest
-      with:
-        subjects: NDgyY2U4YzhmN2U4NjdkYTNhM2MwNWE5YWVlNjM3NzAzZTE3NDcwZWQxY2Y4ODJhOWU1YjQwNWU4ZjgyNjE5ZCAgYXJ0aWZhY3QxCjg5Y2ZjNjk1NGU4OGIyZjkyYTdjMjg3OWQ5ZWIwODVjNDJmM2M3MDY1ZDAxMmE1MDY2ZjQ1MGRiZTU5YjJjMDAgIGFydGlmYWN0Mgo=
-        signKey: private-key.pem
-        reportJobSummary: true
-        reportArtifact: true
-        fail-on-error: true
+      - name: Run Cimon
+        uses: ./attest
+        with:
+          subjects: NDgyY2U4YzhmN2U4NjdkYTNhM2MwNWE5YWVlNjM3NzAzZTE3NDcwZWQxY2Y4ODJhOWU1YjQwNWU4ZjgyNjE5ZCAgYXJ0aWZhY3QxCjg5Y2ZjNjk1NGU4OGIyZjkyYTdjMjg3OWQ5ZWIwODVjNDJmM2M3MDY1ZDAxMmE1MDY2ZjQ1MGRiZTU5YjJjMDAgIGFydGlmYWN0Mgo=
+          signKey: private-key.pem
+          reportJobSummary: true
+          reportArtifact: true
+          fail-on-error: true
