@@ -66,7 +66,7 @@ jobs:
         uses: ./attest
         with:
           subjects: NDgyY2U4YzhmN2U4NjdkYTNhM2MwNWE5YWVlNjM3NzAzZTE3NDcwZWQxY2Y4ODJhOWU1YjQwNWU4ZjgyNjE5ZCAgYXJ0aWZhY3QxCjg5Y2ZjNjk1NGU4OGIyZjkyYTdjMjg3OWQ5ZWIwODVjNDJmM2M3MDY1ZDAxMmE1MDY2ZjQ1MGRiZTU5YjJjMDAgIGFydGlmYWN0Mgo=
-          signKey: private-key.pem
-          reportJobSummary: true
-          reportArtifact: true
+          sign-key: private-key.pem
+          report-job-summary: true
+          report-artifact: true
           fail-on-error: true
