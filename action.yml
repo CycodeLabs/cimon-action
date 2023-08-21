@@ -31,7 +31,7 @@ inputs:
       172.16.0.0/12 networks.
     required: false
   github-token:
-    description: GitHub token (used to overcome GitHub rate limiting)
+    description: GitHub token for enriching build information
     required: false
     default: ${{ github.token }}
   report-job-summary:

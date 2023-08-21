@@ -1,5 +1,4 @@
 import core from '@actions/core';
-import fs from 'fs';
 import docker from './../docker/docker.js';
 import poll from '../poll/poll.js';
 
@@ -8,9 +7,6 @@ async function run() {
 
     const logs = await docker.getContainerLogs('cimon');
     core.info(logs.stdout);
-    if (logs.stderr !== '') {
-        core.error(logs.stderr);
-    }
 
     const containerState = await poll(
         async () => {
@@ -25,6 +21,8 @@ async function run() {
         30 * 1000
     );
 
+    await docker.removeContainer('cimon');
+
     if (logs.stderr !== '') {
         throw new Error(logs.stderr);
     }
@@ -34,8 +32,6 @@ async function run() {
             `Container exited with error: ${containerState.ExitCode}`
         );
     }
-
-    await docker.removeContainer('cimon');
 
     core.info(`Build runtime security agent finished successfully`);
 }

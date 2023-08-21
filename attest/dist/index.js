@@ -10837,6 +10837,9 @@ function getActionConfig() {
             url: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('url'),
             releasePath: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('release-path'),
         },
+        github: {
+            token: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('github-token'),
+        },
         attest: {
             subjects: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('subjects'),
             imageRef: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('image-ref'),
@@ -10867,6 +10870,7 @@ async function run(config) {
         CIMON_REPORT_JOB_SUMMARY: config.report.reportJobSummary,
         CIMON_REPORT_ARTIFACT: "false",
         GITHUB_CONTEXT: config.attest.githubContext,
+        GITHUB_TOKEN: config.github.token,
     };
 
     const options = {
