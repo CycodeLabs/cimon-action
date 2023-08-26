@@ -3,6 +3,30 @@ import docker from './../docker/docker.js';
 import poll from '../poll/poll.js';
 
 async function run() {
+    if (core.getInput('run-as-container')) {
+        core.info('Running in a docker mode');
+        await runInDocker();
+    } else {
+        core.info('Running in a native mode');
+        await runInHost();
+    }
+}
+
+async function runInHost() {
+    const pidBuf = fs.readFileSync('/var/run/cimon.pid');
+    console.log(`Killing process with pid: ${pidBuf.toString()}`);
+    child_process.spawn('sudo', ['kill', '-2', pidBuf.toString()]);
+    console.log('Waiting 5 seconds for Cimon to shutdown');
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    const artifactClient = artifact.create();
+    artifactClient.uploadArtifact('cimon.log', ['cimon.log'], '.', {
+        continueOnError: true,
+    });
+
+    core.info(`Build runtime security agent finished successfully`);
+}
+
+async function runInDocker() {
     await docker.stopContainer('cimon');
 
     const logs = await docker.getContainerLogs('cimon');

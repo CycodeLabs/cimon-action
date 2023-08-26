@@ -4193,6 +4193,30 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 
 
 async function run() {
+    if (_actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('run-as-container')) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running in a docker mode');
+        await runInDocker();
+    } else {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running in a native mode');
+        await runInHost();
+    }
+}
+
+async function runInHost() {
+    const pidBuf = fs.readFileSync('/var/run/cimon.pid');
+    console.log(`Killing process with pid: ${pidBuf.toString()}`);
+    child_process.spawn('sudo', ['kill', '-2', pidBuf.toString()]);
+    console.log('Waiting 5 seconds for Cimon to shutdown');
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    const artifactClient = artifact.create();
+    artifactClient.uploadArtifact('cimon.log', ['cimon.log'], '.', {
+        continueOnError: true,
+    });
+
+    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Build runtime security agent finished successfully`);
+}
+
+async function runInDocker() {
     await _docker_docker_js__WEBPACK_IMPORTED_MODULE_1__/* ["default"].stopContainer */ .Z.stopContainer('cimon');
 
     const logs = await _docker_docker_js__WEBPACK_IMPORTED_MODULE_1__/* ["default"].getContainerLogs */ .Z.getContainerLogs('cimon');

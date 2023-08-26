@@ -2,7 +2,9 @@ import core from '@actions/core';
 import exec from '@actions/exec';
 import docker from '../docker/docker.js';
 import poll from '../poll/poll.js';
+import child_process from 'child_process';
 import fs from 'fs';
+import path from 'path';
 
 function getActionConfig() {
     return {
@@ -35,6 +37,72 @@ function getActionConfig() {
 }
 
 async function run(config) {
+    if (core.getBooleanInput('run-as-container')) {
+        core.info('Running in a docker mode');
+        await runInDocker(config);
+    } else {
+        core.info('Running in a native mode');
+        await runInHost(config);
+    }
+}
+
+async function runInHost(config) {
+    const stdout = fs.openSync('cimon.log', 'a');
+    const stderr = fs.openSync('cimon.log', 'a');
+
+    const env = {
+        ...process.env,
+        CIMON_PREVENT: config.cimon.preventionMode,
+        CIMON_ALLOWED_IPS: config.cimon.allowedIPs,
+        CIMON_ALLOWED_HOSTS: config.cimon.allowedHosts,
+        CIMON_IGNORED_IP_NETS: config.cimon.ignoredIPNets,
+        CIMON_REPORT_GITHUB_JOB_SUMMARY: config.github.jobSummary,
+        CIMON_REPORT_PROCESS_TREE: config.report.processTree,
+        CIMON_SLACK_WEBHOOK_ENDPOINT: config.report.slackWebhookEndpoint,
+        CIMON_APPLY_FS_EVENTS: config.cimon.applyFsEvents,
+        CIMON_CLIENT_ID: config.cimon.clientId,
+        CIMON_SECRET: config.cimon.secret,
+        CIMON_FEATURE_GATES: config.cimon.featureGates,
+        GITHUB_TOKEN: config.github.token,
+        CIMON_LOG_LEVEL: config.cimon.logLevel,
+    };
+
+    const options = {
+        env,
+        detached: true,
+        stdio: ['ignore', stdout, stderr],
+    };
+
+    const scriptPath = path.join('start_cimon_agent.sh');
+    if (config.cimon.releasePath != '') {
+        const cimon = child_process.spawn(
+            'sudo',
+            ['-E', 'bash', scriptPath, config.cimon.releasePath],
+            options
+        );
+    } else {
+        const cimon = child_process.spawn(
+            'sudo',
+            ['-E', 'bash', scriptPath],
+            options
+        );
+    }
+
+    cimon.on('close', (code) => {
+        console.log(`child process exited with code ${code}`);
+    });
+
+    cimon.on('error', (err) => {
+        console.error('Failed to start subprocess.');
+    });
+
+    cimon.unref();
+    // TODO wait for /var/run/cimon.pid
+
+    core.info(`Build runtime security agent started successfully.`);
+}
+
+async function runInDocker(config) {
     if (config.docker.username !== '' && config.docker.password !== '') {
         await docker.login(config.docker.username, config.docker.password);
     }
