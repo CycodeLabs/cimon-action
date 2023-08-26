@@ -10827,7 +10827,6 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 
 
 
-
 function getActionConfig() {
     return {
         cimon: {
@@ -10851,10 +10850,10 @@ function getActionConfig() {
         report: {
             reportJobSummary: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-job-summary'),
             reportArtifact: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-artifact'),
-        }
+        },
     };
 }
-  
+
 async function run(config) {
     const env = {
         ...process.env,
@@ -10868,7 +10867,7 @@ async function run(config) {
         CIMON_SECRET: config.cimon.secret,
         CIMON_URL: config.cimon.url,
         CIMON_REPORT_JOB_SUMMARY: config.report.reportJobSummary,
-        CIMON_REPORT_ARTIFACT: "false",
+        CIMON_REPORT_ARTIFACT: 'false',
         GITHUB_CONTEXT: config.attest.githubContext,
         GITHUB_TOKEN: config.github.token,
     };
@@ -10876,18 +10875,34 @@ async function run(config) {
     const options = {
         env,
     };
-    
+
     const scriptPath = __nccwpck_require__.ab + "attest.sh";
     if (config.cimon.releasePath != '') {
-        await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('bash', [__nccwpck_require__.ab + "attest.sh", config.cimon.releasePath], options);
+        await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(
+            'bash',
+            [__nccwpck_require__.ab + "attest.sh", config.cimon.releasePath],
+            options
+        );
     } else {
         await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('bash', [__nccwpck_require__.ab + "attest.sh"], options);
     }
 
     if (config.report.reportArtifact) {
-        _actions_artifact__WEBPACK_IMPORTED_MODULE_2__.create().uploadArtifact('Cimon-provenance', [config.attest.provenanceOutput], path__WEBPACK_IMPORTED_MODULE_3__.dirname(config.attest.provenanceOutput), {continueOnError: true})
+        _actions_artifact__WEBPACK_IMPORTED_MODULE_2__.create()
+            .uploadArtifact(
+                'Cimon-provenance',
+                [config.attest.provenanceOutput],
+                path__WEBPACK_IMPORTED_MODULE_3__.dirname(config.attest.provenanceOutput),
+                { continueOnError: true }
+            );
         if (config.attest.signKey != '') {
-            _actions_artifact__WEBPACK_IMPORTED_MODULE_2__.create().uploadArtifact('Cimon-signed-provenance', [config.attest.signedProvenanceOutput], path__WEBPACK_IMPORTED_MODULE_3__.dirname(config.attest.signedProvenanceOutput), {continueOnError: true})
+            _actions_artifact__WEBPACK_IMPORTED_MODULE_2__.create()
+                .uploadArtifact(
+                    'Cimon-signed-provenance',
+                    [config.attest.signedProvenanceOutput],
+                    path__WEBPACK_IMPORTED_MODULE_3__.dirname(config.attest.signedProvenanceOutput),
+                    { continueOnError: true }
+                );
         }
     }
 
@@ -10905,6 +10920,7 @@ try {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(log);
     }
 }
+
 __webpack_handle_async_dependencies__();
 }, 1);
 
