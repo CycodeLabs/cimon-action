@@ -4186,32 +4186,66 @@ function wait(ms = 1000) {
 
 __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependencies__) => {
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(186);
-/* harmony import */ var _docker_docker_js__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(313);
-/* harmony import */ var _poll_poll_js__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(884);
+/* harmony import */ var _actions_exec__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(514);
+/* harmony import */ var _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(313);
+/* harmony import */ var _poll_poll_js__WEBPACK_IMPORTED_MODULE_5__ = __nccwpck_require__(884);
+/* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(147);
+/* harmony import */ var path__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(17);
+
+
+
 
 
 
 
 async function run() {
-    await _docker_docker_js__WEBPACK_IMPORTED_MODULE_1__/* ["default"].stopContainer */ .Z.stopContainer('cimon');
+    if (_actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('run-as-container')) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running in a docker mode');
+        await runInDocker();
+    } else {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running in a native mode');
+        await runInHost();
+    }
+}
 
-    const logs = await _docker_docker_js__WEBPACK_IMPORTED_MODULE_1__/* ["default"].getContainerLogs */ .Z.getContainerLogs('cimon');
+async function runInHost() {
+    const scriptPath = __nccwpck_require__.ab + "stop_cimon_agent.sh";
+    fs__WEBPACK_IMPORTED_MODULE_3__.chmodSync(__nccwpck_require__.ab + "stop_cimon_agent.sh", '755');
+
+    const out = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.getExecOutput('sudo', ['-E', 'bash', __nccwpck_require__.ab + "stop_cimon_agent.sh"], {
+        silent: true,
+    });
+
+    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(out.stdout);
+    if (out.stderr !== '') {
+        throw new Error(out.stderr);
+    }
+
+    if (out.exitCode !== 0) {
+        throw new Error(`Failed stopping Cimon process: ${out.exitCode}`);
+    }
+}
+
+async function runInDocker() {
+    await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].stopContainer */ .Z.stopContainer('cimon');
+
+    const logs = await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].getContainerLogs */ .Z.getContainerLogs('cimon');
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(logs.stdout);
 
-    const containerState = await (0,_poll_poll_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"] */ .Z)(
+    const containerState = await (0,_poll_poll_js__WEBPACK_IMPORTED_MODULE_5__/* ["default"] */ .Z)(
         async () => {
-            const state = await _docker_docker_js__WEBPACK_IMPORTED_MODULE_1__/* ["default"].getContainerState */ .Z.getContainerState('cimon');
+            const state = await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].getContainerState */ .Z.getContainerState('cimon');
             _actions_core__WEBPACK_IMPORTED_MODULE_0__.debug(`Checking Cimon state: ${state.Status} ...`);
             return state;
         },
         (state) => {
-            return state.Status !== _docker_docker_js__WEBPACK_IMPORTED_MODULE_1__/* ["default"].CONTAINER_STATUS_EXITED */ .Z.CONTAINER_STATUS_EXITED;
+            return state.Status !== _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].CONTAINER_STATUS_EXITED */ .Z.CONTAINER_STATUS_EXITED;
         },
         1000,
         30 * 1000
     );
 
-    await _docker_docker_js__WEBPACK_IMPORTED_MODULE_1__/* ["default"].removeContainer */ .Z.removeContainer('cimon');
+    await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].removeContainer */ .Z.removeContainer('cimon');
 
     if (logs.stderr !== '') {
         throw new Error(logs.stderr);

@@ -4150,8 +4150,10 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(186);
 /* harmony import */ var _actions_exec__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(514);
 /* harmony import */ var _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(313);
-/* harmony import */ var _poll_poll_js__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(884);
+/* harmony import */ var _poll_poll_js__WEBPACK_IMPORTED_MODULE_5__ = __nccwpck_require__(884);
 /* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(147);
+/* harmony import */ var path__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(17);
+
 
 
 
@@ -4180,6 +4182,7 @@ function getActionConfig() {
             clientId: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('client-id'),
             secret: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('secret'),
             featureGates: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getMultilineInput('feature-gates'),
+            releasePath: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('release-path'),
         },
         report: {
             processTree: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-process-tree'),
@@ -4189,6 +4192,68 @@ function getActionConfig() {
 }
 
 async function run(config) {
+    if (_actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('run-as-container')) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running in a docker mode');
+        await runInDocker(config);
+    } else {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running in a native mode');
+        await runInHost(config);
+    }
+}
+
+async function runInHost(config) {
+    const env = {
+        ...process.env,
+        CIMON_PREVENT: config.cimon.preventionMode,
+        CIMON_ALLOWED_IPS: config.cimon.allowedIPs,
+        CIMON_ALLOWED_HOSTS: config.cimon.allowedHosts,
+        CIMON_IGNORED_IP_NETS: config.cimon.ignoredIPNets,
+        CIMON_REPORT_GITHUB_JOB_SUMMARY: config.github.jobSummary,
+        CIMON_REPORT_PROCESS_TREE: config.report.processTree,
+        CIMON_SLACK_WEBHOOK_ENDPOINT: config.report.slackWebhookEndpoint,
+        CIMON_APPLY_FS_EVENTS: config.cimon.applyFsEvents,
+        CIMON_CLIENT_ID: config.cimon.clientId,
+        CIMON_SECRET: config.cimon.secret,
+        CIMON_FEATURE_GATES: config.cimon.featureGates,
+        GITHUB_TOKEN: config.github.token,
+        CIMON_LOG_LEVEL: config.cimon.logLevel,
+    };
+
+    const options = {
+        env,
+        detached: true,
+        silent: true,
+    };
+
+    var out;
+    const scriptPath = __nccwpck_require__.ab + "start_cimon_agent.sh";
+    fs__WEBPACK_IMPORTED_MODULE_3__.chmodSync(__nccwpck_require__.ab + "start_cimon_agent.sh", '755');
+
+    if (config.cimon.releasePath) {
+        out = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.getExecOutput(
+            'sudo',
+            ['-E', 'bash', __nccwpck_require__.ab + "start_cimon_agent.sh", config.cimon.releasePath],
+            options
+        );
+    } else {
+        out = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.getExecOutput(
+            'sudo',
+            ['-E', 'bash', __nccwpck_require__.ab + "start_cimon_agent.sh"],
+            options
+        );
+    }
+
+    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(out.stdout);
+    if (out.stderr !== '') {
+        throw new Error(out.stderr);
+    }
+
+    if (out.exitCode !== 0) {
+        throw new Error(`Failed starting Cimon process: ${exitCode}`);
+    }
+}
+
+async function runInDocker(config) {
     if (config.docker.username !== '' && config.docker.password !== '') {
         await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].login */ .Z.login(config.docker.username, config.docker.password);
     }
@@ -4293,7 +4358,7 @@ async function run(config) {
 
     fs__WEBPACK_IMPORTED_MODULE_3__.unlinkSync('/tmp/.env');
 
-    const health = await (0,_poll_poll_js__WEBPACK_IMPORTED_MODULE_4__/* ["default"] */ .Z)(
+    const health = await (0,_poll_poll_js__WEBPACK_IMPORTED_MODULE_5__/* ["default"] */ .Z)(
         async () => {
             const state = await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].getContainerState */ .Z.getContainerState('cimon');
             _actions_core__WEBPACK_IMPORTED_MODULE_0__.debug(

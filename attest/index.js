@@ -3,7 +3,6 @@ import exec from '@actions/exec';
 import artifact from '@actions/artifact';
 import path from 'path';
 
-
 function getActionConfig() {
     return {
         cimon: {
@@ -27,10 +26,10 @@ function getActionConfig() {
         report: {
             reportJobSummary: core.getBooleanInput('report-job-summary'),
             reportArtifact: core.getBooleanInput('report-artifact'),
-        }
+        },
     };
 }
-  
+
 async function run(config) {
     const env = {
         ...process.env,
@@ -44,7 +43,7 @@ async function run(config) {
         CIMON_SECRET: config.cimon.secret,
         CIMON_URL: config.cimon.url,
         CIMON_REPORT_JOB_SUMMARY: config.report.reportJobSummary,
-        CIMON_REPORT_ARTIFACT: "false",
+        CIMON_REPORT_ARTIFACT: 'false',
         GITHUB_CONTEXT: config.attest.githubContext,
         GITHUB_TOKEN: config.github.token,
     };
@@ -52,18 +51,36 @@ async function run(config) {
     const options = {
         env,
     };
-    
+
     const scriptPath = path.join(__dirname, 'attest.sh');
     if (config.cimon.releasePath != '') {
-        await exec.exec('bash', [scriptPath, config.cimon.releasePath], options);
+        await exec.exec(
+            'bash',
+            [scriptPath, config.cimon.releasePath],
+            options
+        );
     } else {
         await exec.exec('bash', [scriptPath], options);
     }
 
     if (config.report.reportArtifact) {
-        artifact.create().uploadArtifact('Cimon-provenance', [config.attest.provenanceOutput], path.dirname(config.attest.provenanceOutput), {continueOnError: true})
+        artifact
+            .create()
+            .uploadArtifact(
+                'Cimon-provenance',
+                [config.attest.provenanceOutput],
+                path.dirname(config.attest.provenanceOutput),
+                { continueOnError: true }
+            );
         if (config.attest.signKey != '') {
-            artifact.create().uploadArtifact('Cimon-signed-provenance', [config.attest.signedProvenanceOutput], path.dirname(config.attest.signedProvenanceOutput), {continueOnError: true})
+            artifact
+                .create()
+                .uploadArtifact(
+                    'Cimon-signed-provenance',
+                    [config.attest.signedProvenanceOutput],
+                    path.dirname(config.attest.signedProvenanceOutput),
+                    { continueOnError: true }
+                );
         }
     }
 

@@ -1,8 +1,39 @@
 import core from '@actions/core';
-import docker from './../docker/docker.js';
+import exec from '@actions/exec';
+import docker from '../docker/docker.js';
 import poll from '../poll/poll.js';
+import fs from 'fs';
+import path from 'path';
 
 async function run() {
+    if (core.getBooleanInput('run-as-container')) {
+        core.info('Running in a docker mode');
+        await runInDocker();
+    } else {
+        core.info('Running in a native mode');
+        await runInHost();
+    }
+}
+
+async function runInHost() {
+    const scriptPath = path.join(__dirname, 'stop_cimon_agent.sh');
+    fs.chmodSync(scriptPath, '755');
+
+    const out = await exec.getExecOutput('sudo', ['-E', 'bash', scriptPath], {
+        silent: true,
+    });
+
+    core.info(out.stdout);
+    if (out.stderr !== '') {
+        throw new Error(out.stderr);
+    }
+
+    if (out.exitCode !== 0) {
+        throw new Error(`Failed stopping Cimon process: ${out.exitCode}`);
+    }
+}
+
+async function runInDocker() {
     await docker.stopContainer('cimon');
 
     const logs = await docker.getContainerLogs('cimon');

@@ -14,7 +14,7 @@ inputs:
   prevent:
     description: Enable prevention mode
     required: true
-    default: "false"
+    default: 'false'
   allowed-ips:
     description: A comma-separated list of allowed IP addresses
     required: false
@@ -37,18 +37,18 @@ inputs:
   report-job-summary:
     description: Report results through job summary output
     required: false
-    default: "true"
+    default: 'true'
   report-process-tree:
     description: Enable to report the process tree
     required: false
-    default: "false"
+    default: 'false'
   slack-webhook-endpoint:
     description: Slack webhook endpoint to report security events
     required: false
   apply-fs-events:
     description: Enable processing filesystem events and display them in the process tree report
     required: false
-    default: "false"
+    default: 'false'
   docker-image:
     description: Docker image reference
     required: true
@@ -56,7 +56,7 @@ inputs:
   docker-image-pull:
     description: Skip pulling image from registry (Used for debugging)
     required: false
-    default: "false"
+    default: 'false'
   docker-username:
     description: Username to pull image from registry (Used for debugging)
     required: false
@@ -66,16 +66,24 @@ inputs:
   log-level:
     description: Log level (Used for debugging)
     required: false
-    default: "info"
+    default: 'info'
   feature-gates:
     description: Set of key=value pairs that describe Cimon features.
     required: false
   fail-on-error:
     description: Fail the CI if Cimon encountered an error
     required: false
-    default: "false"
+    default: 'false'
+  run-as-container:
+    description: Run cimon as docker container (instead of running natively)
+    required: false
+    default: 'true'
+  release-path:
+    description: Path to Cimon release file (Used for debugging)
+    required: false
+    default: ''
 
 runs:
   using: node16
-  main: "dist/main/index.js"
-  post: "dist/post/index.js"
+  main: 'dist/main/index.js'
+  post: 'dist/post/index.js'
