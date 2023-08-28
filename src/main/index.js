@@ -3,6 +3,7 @@ import exec from '@actions/exec';
 import docker from '../docker/docker.js';
 import poll from '../poll/poll.js';
 import fs from 'fs';
+import path from 'path';
 
 function getActionConfig() {
     return {
@@ -26,6 +27,7 @@ function getActionConfig() {
             clientId: core.getInput('client-id'),
             secret: core.getInput('secret'),
             featureGates: core.getMultilineInput('feature-gates'),
+            releasePath: core.getInput('release-path'),
         },
         report: {
             processTree: core.getBooleanInput('report-process-tree'),
@@ -35,6 +37,68 @@ function getActionConfig() {
 }
 
 async function run(config) {
+    if (core.getBooleanInput('run-as-container')) {
+        core.info('Running in a docker mode');
+        await runInDocker(config);
+    } else {
+        core.info('Running in a native mode');
+        await runInHost(config);
+    }
+}
+
+async function runInHost(config) {
+    const env = {
+        ...process.env,
+        CIMON_PREVENT: config.cimon.preventionMode,
+        CIMON_ALLOWED_IPS: config.cimon.allowedIPs,
+        CIMON_ALLOWED_HOSTS: config.cimon.allowedHosts,
+        CIMON_IGNORED_IP_NETS: config.cimon.ignoredIPNets,
+        CIMON_REPORT_GITHUB_JOB_SUMMARY: config.github.jobSummary,
+        CIMON_REPORT_PROCESS_TREE: config.report.processTree,
+        CIMON_SLACK_WEBHOOK_ENDPOINT: config.report.slackWebhookEndpoint,
+        CIMON_APPLY_FS_EVENTS: config.cimon.applyFsEvents,
+        CIMON_CLIENT_ID: config.cimon.clientId,
+        CIMON_SECRET: config.cimon.secret,
+        CIMON_FEATURE_GATES: config.cimon.featureGates,
+        GITHUB_TOKEN: config.github.token,
+        CIMON_LOG_LEVEL: config.cimon.logLevel,
+    };
+
+    const options = {
+        env,
+        detached: true,
+        silent: true,
+    };
+
+    var out;
+    const scriptPath = path.join(__dirname, 'start_cimon_agent.sh');
+    fs.chmodSync(scriptPath, '755');
+
+    if (config.cimon.releasePath) {
+        out = await exec.getExecOutput(
+            'sudo',
+            ['-E', 'bash', scriptPath, config.cimon.releasePath],
+            options
+        );
+    } else {
+        out = await exec.getExecOutput(
+            'sudo',
+            ['-E', 'bash', scriptPath],
+            options
+        );
+    }
+
+    core.info(out.stdout);
+    if (out.stderr !== '') {
+        throw new Error(out.stderr);
+    }
+
+    if (out.exitCode !== 0) {
+        throw new Error(`Failed starting Cimon process: ${exitCode}`);
+    }
+}
+
+async function runInDocker(config) {
     if (config.docker.username !== '' && config.docker.password !== '') {
         await docker.login(config.docker.username, config.docker.password);
     }
