@@ -4222,33 +4222,28 @@ async function runInHost(config) {
     const options = {
         env,
         detached: true,
-        silent: true,
+        silent: false,
     };
 
-    var out;
+    var retval;
     const scriptPath = __nccwpck_require__.ab + "start_cimon_agent.sh";
     fs__WEBPACK_IMPORTED_MODULE_3__.chmodSync(__nccwpck_require__.ab + "start_cimon_agent.sh", '755');
 
     if (config.cimon.releasePath) {
-        out = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.getExecOutput(
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(
+            `Running Cimon from release path: ${config.cimon.releasePath}`
+        );
+        retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(
             'sudo',
             ['-E', 'bash', __nccwpck_require__.ab + "start_cimon_agent.sh", config.cimon.releasePath],
             options
         );
     } else {
-        out = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.getExecOutput(
-            'sudo',
-            ['-E', 'bash', __nccwpck_require__.ab + "start_cimon_agent.sh"],
-            options
-        );
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running Cimon from latest release path');
+        retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sudo', ['-E', 'bash', __nccwpck_require__.ab + "start_cimon_agent.sh"], options);
     }
 
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(out.stdout);
-    if (out.stderr !== '') {
-        throw new Error(out.stderr);
-    }
-
-    if (out.exitCode !== 0) {
+    if (retval !== 0) {
         throw new Error(`Failed starting Cimon process: ${exitCode}`);
     }
 }

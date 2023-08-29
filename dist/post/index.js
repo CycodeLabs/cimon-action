@@ -4198,35 +4198,44 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 
 
 
-async function run() {
+function getActionConfig() {
+    return {
+        cimon: {
+            logLevel: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('log-level'),
+        },
+    };
+}
+
+async function run(config) {
     if (_actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('run-as-container')) {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running in a docker mode');
-        await runInDocker();
+        await runInDocker(config);
     } else {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running in a native mode');
-        await runInHost();
+        await runInHost(config);
     }
 }
 
-async function runInHost() {
+async function runInHost(config) {
+    const env = {
+        ...process.env,
+        CIMON_LOG_LEVEL: config.cimon.logLevel,
+    };
+
     const scriptPath = __nccwpck_require__.ab + "stop_cimon_agent.sh";
     fs__WEBPACK_IMPORTED_MODULE_3__.chmodSync(__nccwpck_require__.ab + "stop_cimon_agent.sh", '755');
 
-    const out = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.getExecOutput('sudo', ['-E', 'bash', __nccwpck_require__.ab + "stop_cimon_agent.sh"], {
-        silent: true,
+    const retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sudo', ['-E', 'bash', __nccwpck_require__.ab + "stop_cimon_agent.sh"], {
+        env,
+        silent: false,
     });
 
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(out.stdout);
-    if (out.stderr !== '') {
-        throw new Error(out.stderr);
-    }
-
-    if (out.exitCode !== 0) {
-        throw new Error(`Failed stopping Cimon process: ${out.exitCode}`);
+    if (retval !== 0) {
+        throw new Error(`Failed stopping Cimon process: ${retval}`);
     }
 }
 
-async function runInDocker() {
+async function runInDocker(config) {
     await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].stopContainer */ .Z.stopContainer('cimon');
 
     const logs = await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].getContainerLogs */ .Z.getContainerLogs('cimon');
@@ -4261,7 +4270,7 @@ async function runInDocker() {
 }
 
 try {
-    await run();
+    await run(getActionConfig());
 } catch (error) {
     const failOnError = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('fail-on-error');
     const reportJobSummary = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-job-summary');

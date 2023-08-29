@@ -5,35 +5,44 @@ import poll from '../poll/poll.js';
 import fs from 'fs';
 import path from 'path';
 
-async function run() {
+function getActionConfig() {
+    return {
+        cimon: {
+            logLevel: core.getInput('log-level'),
+        },
+    };
+}
+
+async function run(config) {
     if (core.getBooleanInput('run-as-container')) {
         core.info('Running in a docker mode');
-        await runInDocker();
+        await runInDocker(config);
     } else {
         core.info('Running in a native mode');
-        await runInHost();
+        await runInHost(config);
     }
 }
 
-async function runInHost() {
+async function runInHost(config) {
+    const env = {
+        ...process.env,
+        CIMON_LOG_LEVEL: config.cimon.logLevel,
+    };
+
     const scriptPath = path.join(__dirname, 'stop_cimon_agent.sh');
     fs.chmodSync(scriptPath, '755');
 
-    const out = await exec.getExecOutput('sudo', ['-E', 'bash', scriptPath], {
-        silent: true,
+    const retval = await exec.exec('sudo', ['-E', 'bash', scriptPath], {
+        env,
+        silent: false,
     });
 
-    core.info(out.stdout);
-    if (out.stderr !== '') {
-        throw new Error(out.stderr);
-    }
-
-    if (out.exitCode !== 0) {
-        throw new Error(`Failed stopping Cimon process: ${out.exitCode}`);
+    if (retval !== 0) {
+        throw new Error(`Failed stopping Cimon process: ${retval}`);
     }
 }
 
-async function runInDocker() {
+async function runInDocker(config) {
     await docker.stopContainer('cimon');
 
     const logs = await docker.getContainerLogs('cimon');
@@ -68,7 +77,7 @@ async function runInDocker() {
 }
 
 try {
-    await run();
+    await run(getActionConfig());
 } catch (error) {
     const failOnError = core.getBooleanInput('fail-on-error');
     const reportJobSummary = core.getBooleanInput('report-job-summary');

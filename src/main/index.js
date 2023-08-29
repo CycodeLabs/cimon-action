@@ -67,33 +67,28 @@ async function runInHost(config) {
     const options = {
         env,
         detached: true,
-        silent: true,
+        silent: false,
     };
 
-    var out;
+    var retval;
     const scriptPath = path.join(__dirname, 'start_cimon_agent.sh');
     fs.chmodSync(scriptPath, '755');
 
     if (config.cimon.releasePath) {
-        out = await exec.getExecOutput(
+        core.info(
+            `Running Cimon from release path: ${config.cimon.releasePath}`
+        );
+        retval = await exec.exec(
             'sudo',
             ['-E', 'bash', scriptPath, config.cimon.releasePath],
             options
         );
     } else {
-        out = await exec.getExecOutput(
-            'sudo',
-            ['-E', 'bash', scriptPath],
-            options
-        );
+        core.info('Running Cimon from latest release path');
+        retval = await exec.exec('sudo', ['-E', 'bash', scriptPath], options);
     }
 
-    core.info(out.stdout);
-    if (out.stderr !== '') {
-        throw new Error(out.stderr);
-    }
-
-    if (out.exitCode !== 0) {
+    if (retval !== 0) {
         throw new Error(`Failed starting Cimon process: ${exitCode}`);
     }
 }
