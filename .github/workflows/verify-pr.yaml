@@ -53,6 +53,7 @@ jobs:
           report-process-tree: true
           fail-on-error: true
           run-as-container: false
+          log-level: debug
 
       - name: Test
         run: |
