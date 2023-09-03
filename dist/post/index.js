@@ -4206,6 +4206,17 @@ function getActionConfig() {
     };
 }
 
+async function sudoExists() {
+    try {
+        const retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sudo', ['-v'], {
+            silent: true,
+        });
+        return retval === 0;
+    } catch (error) {
+        return false;
+    }
+}
+
 async function run(config) {
     if (_actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('run-as-container')) {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running in a docker mode');
@@ -4222,13 +4233,22 @@ async function runInHost(config) {
         CIMON_LOG_LEVEL: config.cimon.logLevel,
     };
 
+    var retval;
+    const sudo = await sudoExists();
     const scriptPath = __nccwpck_require__.ab + "stop_cimon_agent.sh";
     fs__WEBPACK_IMPORTED_MODULE_3__.chmodSync(__nccwpck_require__.ab + "stop_cimon_agent.sh", '755');
 
-    const retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sudo', ['-E', 'bash', __nccwpck_require__.ab + "stop_cimon_agent.sh"], {
-        env,
-        silent: false,
-    });
+    if (sudo) {
+        retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sudo', ['-E', 'sh', __nccwpck_require__.ab + "stop_cimon_agent.sh"], {
+            env,
+            silent: false,
+        });
+    } else {
+        retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sh', [__nccwpck_require__.ab + "stop_cimon_agent.sh"], {
+            env,
+            silent: false,
+        });
+    }
 
     if (retval !== 0) {
         throw new Error(`Failed stopping Cimon process: ${retval}`);

@@ -4192,6 +4192,17 @@ function getActionConfig() {
     };
 }
 
+async function sudoExists() {
+    try {
+        const retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sudo', ['-v'], {
+            silent: true,
+        });
+        return retval === 0;
+    } catch (error) {
+        return false;
+    }
+}
+
 async function run(config) {
     if (_actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('run-as-container')) {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running in a docker mode');
@@ -4221,13 +4232,13 @@ async function runInHost(config) {
         CIMON_LOG_LEVEL: config.cimon.logLevel,
     };
 
+    var retval;
+    const sudo = await sudoExists();
     const options = {
         env,
         detached: true,
         silent: false,
     };
-
-    var retval;
     const scriptPath = __nccwpck_require__.ab + "start_cimon_agent.sh";
     fs__WEBPACK_IMPORTED_MODULE_3__.chmodSync(__nccwpck_require__.ab + "start_cimon_agent.sh", '755');
 
@@ -4235,14 +4246,26 @@ async function runInHost(config) {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(
             `Running Cimon from release path: ${config.cimon.releasePath}`
         );
-        retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(
-            'sudo',
-            ['-E', 'bash', __nccwpck_require__.ab + "start_cimon_agent.sh", config.cimon.releasePath],
-            options
-        );
+        if (sudo) {
+            retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(
+                'sudo',
+                ['-E', 'sh', __nccwpck_require__.ab + "start_cimon_agent.sh", config.cimon.releasePath],
+                options
+            );
+        } else {
+            retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(
+                'sh',
+                [__nccwpck_require__.ab + "start_cimon_agent.sh", config.cimon.releasePath],
+                options
+            );
+        }
     } else {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running Cimon from latest release path');
-        retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sudo', ['-E', 'bash', __nccwpck_require__.ab + "start_cimon_agent.sh"], options);
+        if (sudo) {
+            retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sudo', ['-E', 'sh', __nccwpck_require__.ab + "start_cimon_agent.sh"], options);
+        } else {
+            retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sh', [__nccwpck_require__.ab + "start_cimon_agent.sh"], options);
+        }
     }
 
     if (retval !== 0) {

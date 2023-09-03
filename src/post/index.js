@@ -13,6 +13,17 @@ function getActionConfig() {
     };
 }
 
+async function sudoExists() {
+    try {
+        const retval = await exec.exec('sudo', ['-v'], {
+            silent: true,
+        });
+        return retval === 0;
+    } catch (error) {
+        return false;
+    }
+}
+
 async function run(config) {
     if (core.getBooleanInput('run-as-container')) {
         core.info('Running in a docker mode');
@@ -29,13 +40,22 @@ async function runInHost(config) {
         CIMON_LOG_LEVEL: config.cimon.logLevel,
     };
 
+    var retval;
+    const sudo = await sudoExists();
     const scriptPath = path.join(__dirname, 'stop_cimon_agent.sh');
     fs.chmodSync(scriptPath, '755');
 
-    const retval = await exec.exec('sudo', ['-E', 'bash', scriptPath], {
-        env,
-        silent: false,
-    });
+    if (sudo) {
+        retval = await exec.exec('sudo', ['-E', 'sh', scriptPath], {
+            env,
+            silent: false,
+        });
+    } else {
+        retval = await exec.exec('sh', [scriptPath], {
+            env,
+            silent: false,
+        });
+    }
 
     if (retval !== 0) {
         throw new Error(`Failed stopping Cimon process: ${retval}`);
