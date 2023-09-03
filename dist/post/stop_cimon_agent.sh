@@ -1,39 +1,39 @@
-#!/bin/bash
-set -ueo pipefail
+#!/bin/sh
+set -eu
 
 log() {
-	if [ "$CIMON_LOG_LEVEL" = "debug" ] || [ "$CIMON_LOG_LEVEL" = "trace" ]; then
-		echo "$1"
-	fi
+    if [ "$CIMON_LOG_LEVEL" = "debug" ] || [ "$CIMON_LOG_LEVEL" = "trace" ]; then
+        echo "$1"
+    fi
 }
 
 pidFilePath="/var/run/cimon.pid"
 timeoutSeconds=15
 sleepInterval=1
 
-if [[ ! -f "$pidFilePath" ]]; then
+if [ ! -f "$pidFilePath" ]; then
     >&2 echo "PID file $pidFilePath not found."
 
     # Could happen if Cimon failed to start.
     if [ -f cimon.err ]; then
         >&2 cat cimon.err
     fi
+    exit 1
 fi
 
 pid=$(cat "$pidFilePath")
 log "Read PID from file $pidFilePath: $pid"
-if [[ ! "$pid" =~ ^[0-9]+$ ]]; then
-    >&2 echo "Invalid PID format in the file: $pid"
-    exit 1
-fi
+case $pid in
+    ''|*[!0-9]*) >&2 echo "Invalid PID format in the file: $pid" && exit 1 ;;
+esac
 
 echo "Terminating Cimon process $pid"
 kill -2 "$pid"
 
 waitedSeconds=0
-while kill -0 "$pid" 2>/dev/null && [[ $waitedSeconds -lt $timeoutSeconds ]]; do
+while kill -0 "$pid" 2>/dev/null && [ "$waitedSeconds" -lt "$timeoutSeconds" ]; do
     sleep "$sleepInterval"
-    ((waitedSeconds+=sleepInterval))
+    waitedSeconds=$((waitedSeconds + sleepInterval))
 done
 
 if kill -0 "$pid" 2>/dev/null; then

@@ -37,6 +37,17 @@ function getActionConfig() {
     };
 }
 
+async function sudoExists() {
+    try {
+        const retval = await exec.exec('sudo', ['-v'], {
+            silent: true,
+        });
+        return retval === 0;
+    } catch (error) {
+        return false;
+    }
+}
+
 async function run(config) {
     if (core.getBooleanInput('run-as-container')) {
         core.info('Running in a docker mode');
@@ -66,13 +77,13 @@ async function runInHost(config) {
         CIMON_LOG_LEVEL: config.cimon.logLevel,
     };
 
+    var retval;
+    const sudo = await sudoExists();
     const options = {
         env,
         detached: true,
         silent: false,
     };
-
-    var retval;
     const scriptPath = path.join(__dirname, 'start_cimon_agent.sh');
     fs.chmodSync(scriptPath, '755');
 
@@ -80,14 +91,26 @@ async function runInHost(config) {
         core.info(
             `Running Cimon from release path: ${config.cimon.releasePath}`
         );
-        retval = await exec.exec(
-            'sudo',
-            ['-E', 'bash', scriptPath, config.cimon.releasePath],
-            options
-        );
+        if (sudo) {
+            retval = await exec.exec(
+                'sudo',
+                ['-E', 'sh', scriptPath, config.cimon.releasePath],
+                options
+            );
+        } else {
+            retval = await exec.exec(
+                'sh',
+                [scriptPath, config.cimon.releasePath],
+                options
+            );
+        }
     } else {
         core.info('Running Cimon from latest release path');
-        retval = await exec.exec('sudo', ['-E', 'bash', scriptPath], options);
+        if (sudo) {
+            retval = await exec.exec('sudo', ['-E', 'sh', scriptPath], options);
+        } else {
+            retval = await exec.exec('sh', [scriptPath], options);
+        }
     }
 
     if (retval !== 0) {
