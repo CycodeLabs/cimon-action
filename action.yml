@@ -11,6 +11,9 @@ inputs:
   secret:
     description: Cimon secret for authentication
     required: false
+  url:
+    description: Cimon endpoint for authentication
+    required: false
   prevent:
     description: Enable prevention mode
     required: true
