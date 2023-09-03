@@ -4181,6 +4181,7 @@ function getActionConfig() {
             applyFsEvents: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('apply-fs-events'),
             clientId: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('client-id'),
             secret: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('secret'),
+            url: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('url'),
             featureGates: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getMultilineInput('feature-gates'),
             releasePath: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('release-path'),
         },
@@ -4214,6 +4215,7 @@ async function runInHost(config) {
         CIMON_APPLY_FS_EVENTS: config.cimon.applyFsEvents,
         CIMON_CLIENT_ID: config.cimon.clientId,
         CIMON_SECRET: config.cimon.secret,
+        CIMON_URL: config.cimon.url,
         CIMON_FEATURE_GATES: config.cimon.featureGates,
         GITHUB_TOKEN: config.github.token,
         CIMON_LOG_LEVEL: config.cimon.logLevel,
@@ -4333,6 +4335,10 @@ async function runInDocker(config) {
 
     if (config.cimon.secret !== '') {
         args.push('--env', `CIMON_SECRET=${config.cimon.secret}`);
+    }
+
+    if (config.cimon.url !== '') {
+        args.push('--env', `CIMON_URL=${config.cimon.url}`);
     }
 
     if (config.cimon.featureGates !== '') {
