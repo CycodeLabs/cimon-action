@@ -3,6 +3,8 @@ set -ue
 
 subcmd=agent
 pidFilePath="/var/run/cimon.pid"
+logFile="/tmp/cimon.log"
+errFile="/tmp/cimon.err"
 
 is_command() {
   command -v "$1" >/dev/null
@@ -136,7 +138,16 @@ fi
 chmod +x ./cimon
 log "Starting Cimon agent"
 
-./cimon $subcmd 1>cimon.log 2>cimon.err &
+# First running Cimon in dry run mode to check configuration and setup errors.
+log "Running Cimon in dry run mode"
+CIMON_DRY_RUN=1 ./cimon $subcmd 1>$logFile 2>$errFile
+if [ -s "$errFile" ]; then
+    >&2 echo "Cimon process failed to start. Error log:"
+    >&2 cat "$errFile"
+    exit 1
+fi
+log "Running Cimon"
+./cimon $subcmd 1>$logFile 2>$errFile &
 wait_for_init ./cimon
 
 echo "Build runtime security agent started successfully."

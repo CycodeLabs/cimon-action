@@ -1,6 +1,9 @@
 #!/bin/sh
 set -eu
 
+logFile="/tmp/cimon.log"
+errFile="/tmp/cimon.err"
+
 log() {
     if [ "$CIMON_LOG_LEVEL" = "debug" ] || [ "$CIMON_LOG_LEVEL" = "trace" ]; then
         echo "$1"
@@ -12,11 +15,11 @@ timeoutSeconds=15
 sleepInterval=1
 
 if [ ! -f "$pidFilePath" ]; then
-    >&2 echo "PID file $pidFilePath not found."
-
-    # Could happen if Cimon failed to start.
     if [ -f cimon.err ]; then
+        >&2 echo "Cimon process failed to start. Error log:"
         >&2 cat cimon.err
+    else
+        >&2 echo "Cimon process failed to start. No error log found."
     fi
     exit 1
 fi
@@ -43,7 +46,7 @@ fi
 
 log "Cimon process $pid terminated successfully"
 
-cat "cimon.log"
->&2 cat "cimon.err"
+cat "$logFile"
+>&2 cat "$errFile"
 
 echo "Build runtime security agent finished successfully"
