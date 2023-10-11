@@ -1,7 +1,22 @@
 import core from '@actions/core';
 import exec from '@actions/exec';
 import artifact from '@actions/artifact';
+import * as http from '@actions/http-client';
 import path from 'path';
+import fs from 'fs';
+
+const CIMON_SCRIPT_DOWNLOAD_URL =
+    'https://cimon-releases.s3.amazonaws.com/run.sh';
+const CIMON_SCRIPT_PATH = '/tmp/install.sh';
+const CIMON_SUBCMD = 'attest';
+
+const httpClient = new http.HttpClient('cimon-action');
+
+async function downloadToFile(url, filePath) {
+    const response = await httpClient.get(url);
+    const responseBody = await response.readBody();
+    fs.writeFileSync(filePath, responseBody);
+}
 
 function getActionConfig() {
     return {
@@ -31,6 +46,8 @@ function getActionConfig() {
 }
 
 async function run(config) {
+    await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
+
     const env = {
         ...process.env,
         CIMON_SUBJECTS: config.attest.subjects,
@@ -52,22 +69,22 @@ async function run(config) {
         env,
     };
 
-    const scriptPath = path.join(__dirname, 'attest.sh');
     if (config.cimon.releasePath != '') {
         await exec.exec(
             'bash',
-            [scriptPath, config.cimon.releasePath],
+            [CIMON_SCRIPT_PATH, CIMON_SUBCMD, config.cimon.releasePath],
             options
         );
     } else {
-        await exec.exec('bash', [scriptPath], options);
+        await exec.exec('bash', [CIMON_SCRIPT_PATH, CIMON_SUBCMD], options);
     }
+    fs.rmSync(CIMON_SCRIPT_PATH);
 
     if (config.report.reportArtifact) {
         artifact
             .create()
             .uploadArtifact(
-                'Cimon-provenance',
+                'provenance',
                 [config.attest.provenanceOutput],
                 path.dirname(config.attest.provenanceOutput),
                 { continueOnError: true }
@@ -76,7 +93,7 @@ async function run(config) {
             artifact
                 .create()
                 .uploadArtifact(
-                    'Cimon-signed-provenance',
+                    'signed-provenance',
                     [config.attest.signedProvenanceOutput],
                     path.dirname(config.attest.signedProvenanceOutput),
                     { continueOnError: true }

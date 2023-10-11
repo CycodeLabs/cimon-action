@@ -10821,11 +10821,28 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(2186);
 /* harmony import */ var _actions_exec__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(1514);
 /* harmony import */ var _actions_artifact__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(2605);
-/* harmony import */ var path__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(1017);
+/* harmony import */ var _actions_http_client__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(6255);
+/* harmony import */ var path__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(1017);
+/* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_5__ = __nccwpck_require__(7147);
 
 
 
 
+
+
+
+const CIMON_SCRIPT_DOWNLOAD_URL =
+    'https://cimon-releases.s3.amazonaws.com/run.sh';
+const CIMON_SCRIPT_PATH = '/tmp/install.sh';
+const CIMON_SUBCMD = 'attest';
+
+const httpClient = new _actions_http_client__WEBPACK_IMPORTED_MODULE_3__.HttpClient('cimon-action');
+
+async function downloadToFile(url, filePath) {
+    const response = await httpClient.get(url);
+    const responseBody = await response.readBody();
+    fs__WEBPACK_IMPORTED_MODULE_5__.writeFileSync(filePath, responseBody);
+}
 
 function getActionConfig() {
     return {
@@ -10855,6 +10872,8 @@ function getActionConfig() {
 }
 
 async function run(config) {
+    await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
+
     const env = {
         ...process.env,
         CIMON_SUBJECTS: config.attest.subjects,
@@ -10876,31 +10895,31 @@ async function run(config) {
         env,
     };
 
-    const scriptPath = __nccwpck_require__.ab + "attest.sh";
     if (config.cimon.releasePath != '') {
         await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(
             'bash',
-            [__nccwpck_require__.ab + "attest.sh", config.cimon.releasePath],
+            [CIMON_SCRIPT_PATH, CIMON_SUBCMD, config.cimon.releasePath],
             options
         );
     } else {
-        await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('bash', [__nccwpck_require__.ab + "attest.sh"], options);
+        await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('bash', [CIMON_SCRIPT_PATH, CIMON_SUBCMD], options);
     }
+    fs__WEBPACK_IMPORTED_MODULE_5__.rmSync(CIMON_SCRIPT_PATH);
 
     if (config.report.reportArtifact) {
         _actions_artifact__WEBPACK_IMPORTED_MODULE_2__.create()
             .uploadArtifact(
-                'Cimon-provenance',
+                'provenance',
                 [config.attest.provenanceOutput],
-                path__WEBPACK_IMPORTED_MODULE_3__.dirname(config.attest.provenanceOutput),
+                path__WEBPACK_IMPORTED_MODULE_4__.dirname(config.attest.provenanceOutput),
                 { continueOnError: true }
             );
         if (config.attest.signKey != '') {
             _actions_artifact__WEBPACK_IMPORTED_MODULE_2__.create()
                 .uploadArtifact(
-                    'Cimon-signed-provenance',
+                    'signed-provenance',
                     [config.attest.signedProvenanceOutput],
-                    path__WEBPACK_IMPORTED_MODULE_3__.dirname(config.attest.signedProvenanceOutput),
+                    path__WEBPACK_IMPORTED_MODULE_4__.dirname(config.attest.signedProvenanceOutput),
                     { continueOnError: true }
                 );
         }

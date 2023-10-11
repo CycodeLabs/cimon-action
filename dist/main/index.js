@@ -4152,13 +4152,26 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony import */ var _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(313);
 /* harmony import */ var _poll_poll_js__WEBPACK_IMPORTED_MODULE_5__ = __nccwpck_require__(884);
 /* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(147);
-/* harmony import */ var path__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(17);
+/* harmony import */ var _actions_http_client__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(255);
 
 
 
 
 
 
+
+const CIMON_SCRIPT_DOWNLOAD_URL =
+    'https://cimon-releases.s3.amazonaws.com/run.sh';
+const CIMON_SCRIPT_PATH = '/tmp/install.sh';
+const CIMON_SUBCMD = 'agent';
+
+const httpClient = new _actions_http_client__WEBPACK_IMPORTED_MODULE_4__.HttpClient('cimon-action');
+
+async function downloadToFile(url, filePath) {
+    const response = await httpClient.get(url);
+    const responseBody = await response.readBody();
+    fs__WEBPACK_IMPORTED_MODULE_3__.writeFileSync(filePath, responseBody);
+}
 
 function getActionConfig() {
     return {
@@ -4214,6 +4227,8 @@ async function run(config) {
 }
 
 async function runInHost(config) {
+    await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
+
     const env = {
         ...process.env,
         CIMON_PREVENT: config.cimon.preventionMode,
@@ -4239,8 +4254,6 @@ async function runInHost(config) {
         detached: true,
         silent: false,
     };
-    const scriptPath = __nccwpck_require__.ab + "start_cimon_agent.sh";
-    fs__WEBPACK_IMPORTED_MODULE_3__.chmodSync(__nccwpck_require__.ab + "start_cimon_agent.sh", '755');
 
     if (config.cimon.releasePath) {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(
@@ -4249,22 +4262,36 @@ async function runInHost(config) {
         if (sudo) {
             retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(
                 'sudo',
-                ['-E', 'sh', __nccwpck_require__.ab + "start_cimon_agent.sh", config.cimon.releasePath],
+                [
+                    '-E',
+                    'sh',
+                    CIMON_SCRIPT_PATH,
+                    CIMON_SUBCMD,
+                    config.cimon.releasePath,
+                ],
                 options
             );
         } else {
             retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(
                 'sh',
-                [__nccwpck_require__.ab + "start_cimon_agent.sh", config.cimon.releasePath],
+                [CIMON_SCRIPT_PATH, CIMON_SUBCMD, config.cimon.releasePath],
                 options
             );
         }
     } else {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running Cimon from latest release path');
         if (sudo) {
-            retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sudo', ['-E', 'sh', __nccwpck_require__.ab + "start_cimon_agent.sh"], options);
+            retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(
+                'sudo',
+                ['-E', 'sh', CIMON_SCRIPT_PATH, CIMON_SUBCMD],
+                options
+            );
         } else {
-            retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sh', [__nccwpck_require__.ab + "start_cimon_agent.sh"], options);
+            retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(
+                'sh',
+                [CIMON_SCRIPT_PATH, CIMON_SUBCMD],
+                options
+            );
         }
     }
 
