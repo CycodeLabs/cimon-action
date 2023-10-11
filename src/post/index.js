@@ -3,7 +3,9 @@ import exec from '@actions/exec';
 import docker from '../docker/docker.js';
 import poll from '../poll/poll.js';
 import fs from 'fs';
-import path from 'path';
+
+const CIMON_SCRIPT_PATH = '/tmp/install.sh';
+const CIMON_SUBCMD = 'stop';
 
 function getActionConfig() {
     return {
@@ -42,20 +44,23 @@ async function runInHost(config) {
 
     var retval;
     const sudo = await sudoExists();
-    const scriptPath = path.join(__dirname, 'stop_cimon_agent.sh');
-    fs.chmodSync(scriptPath, '755');
 
     if (sudo) {
-        retval = await exec.exec('sudo', ['-E', 'sh', scriptPath], {
-            env,
-            silent: false,
-        });
+        retval = await exec.exec(
+            'sudo',
+            ['-E', 'sh', CIMON_SCRIPT_PATH, CIMON_SUBCMD],
+            {
+                env,
+                silent: false,
+            }
+        );
     } else {
-        retval = await exec.exec('sh', [scriptPath], {
+        retval = await exec.exec('sh', [CIMON_SCRIPT_PATH, CIMON_SUBCMD], {
             env,
             silent: false,
         });
     }
+    fs.rmSync(CIMON_SCRIPT_PATH);
 
     if (retval !== 0) {
         throw new Error(`Failed stopping Cimon process: ${retval}`);

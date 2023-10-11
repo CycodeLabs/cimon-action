@@ -3,7 +3,20 @@ import exec from '@actions/exec';
 import docker from '../docker/docker.js';
 import poll from '../poll/poll.js';
 import fs from 'fs';
-import path from 'path';
+import * as http from '@actions/http-client';
+
+const CIMON_SCRIPT_DOWNLOAD_URL =
+    'https://cimon-releases.s3.amazonaws.com/run.sh';
+const CIMON_SCRIPT_PATH = '/tmp/install.sh';
+const CIMON_SUBCMD = 'agent';
+
+const httpClient = new http.HttpClient('cimon-action');
+
+async function downloadToFile(url, filePath) {
+    const response = await httpClient.get(url);
+    const responseBody = await response.readBody();
+    fs.writeFileSync(filePath, responseBody);
+}
 
 function getActionConfig() {
     return {
@@ -59,6 +72,8 @@ async function run(config) {
 }
 
 async function runInHost(config) {
+    await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
+
     const env = {
         ...process.env,
         CIMON_PREVENT: config.cimon.preventionMode,
@@ -84,8 +99,6 @@ async function runInHost(config) {
         detached: true,
         silent: false,
     };
-    const scriptPath = path.join(__dirname, 'start_cimon_agent.sh');
-    fs.chmodSync(scriptPath, '755');
 
     if (config.cimon.releasePath) {
         core.info(
@@ -94,22 +107,36 @@ async function runInHost(config) {
         if (sudo) {
             retval = await exec.exec(
                 'sudo',
-                ['-E', 'sh', scriptPath, config.cimon.releasePath],
+                [
+                    '-E',
+                    'sh',
+                    CIMON_SCRIPT_PATH,
+                    CIMON_SUBCMD,
+                    config.cimon.releasePath,
+                ],
                 options
             );
         } else {
             retval = await exec.exec(
                 'sh',
-                [scriptPath, config.cimon.releasePath],
+                [CIMON_SCRIPT_PATH, CIMON_SUBCMD, config.cimon.releasePath],
                 options
             );
         }
     } else {
         core.info('Running Cimon from latest release path');
         if (sudo) {
-            retval = await exec.exec('sudo', ['-E', 'sh', scriptPath], options);
+            retval = await exec.exec(
+                'sudo',
+                ['-E', 'sh', CIMON_SCRIPT_PATH, CIMON_SUBCMD],
+                options
+            );
         } else {
-            retval = await exec.exec('sh', [scriptPath], options);
+            retval = await exec.exec(
+                'sh',
+                [CIMON_SCRIPT_PATH, CIMON_SUBCMD],
+                options
+            );
         }
     }
 

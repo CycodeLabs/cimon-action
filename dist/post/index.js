@@ -4188,15 +4188,16 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(186);
 /* harmony import */ var _actions_exec__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(514);
 /* harmony import */ var _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(313);
-/* harmony import */ var _poll_poll_js__WEBPACK_IMPORTED_MODULE_5__ = __nccwpck_require__(884);
+/* harmony import */ var _poll_poll_js__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(884);
 /* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(147);
-/* harmony import */ var path__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(17);
 
 
 
 
 
 
+const CIMON_SCRIPT_PATH = '/tmp/install.sh';
+const CIMON_SUBCMD = 'stop';
 
 function getActionConfig() {
     return {
@@ -4235,20 +4236,23 @@ async function runInHost(config) {
 
     var retval;
     const sudo = await sudoExists();
-    const scriptPath = __nccwpck_require__.ab + "stop_cimon_agent.sh";
-    fs__WEBPACK_IMPORTED_MODULE_3__.chmodSync(__nccwpck_require__.ab + "stop_cimon_agent.sh", '755');
 
     if (sudo) {
-        retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sudo', ['-E', 'sh', __nccwpck_require__.ab + "stop_cimon_agent.sh"], {
-            env,
-            silent: false,
-        });
+        retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(
+            'sudo',
+            ['-E', 'sh', CIMON_SCRIPT_PATH, CIMON_SUBCMD],
+            {
+                env,
+                silent: false,
+            }
+        );
     } else {
-        retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sh', [__nccwpck_require__.ab + "stop_cimon_agent.sh"], {
+        retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sh', [CIMON_SCRIPT_PATH, CIMON_SUBCMD], {
             env,
             silent: false,
         });
     }
+    fs__WEBPACK_IMPORTED_MODULE_3__.rmSync(CIMON_SCRIPT_PATH);
 
     if (retval !== 0) {
         throw new Error(`Failed stopping Cimon process: ${retval}`);
@@ -4261,7 +4265,7 @@ async function runInDocker(config) {
     const logs = await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].getContainerLogs */ .Z.getContainerLogs('cimon');
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(logs.stdout);
 
-    const containerState = await (0,_poll_poll_js__WEBPACK_IMPORTED_MODULE_5__/* ["default"] */ .Z)(
+    const containerState = await (0,_poll_poll_js__WEBPACK_IMPORTED_MODULE_4__/* ["default"] */ .Z)(
         async () => {
             const state = await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].getContainerState */ .Z.getContainerState('cimon');
             _actions_core__WEBPACK_IMPORTED_MODULE_0__.debug(`Checking Cimon state: ${state.Status} ...`);
