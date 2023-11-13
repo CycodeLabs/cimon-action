@@ -4023,138 +4023,14 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("util");
 
 /***/ }),
 
-/***/ 313:
-/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
-
-/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
-/* harmony export */   "Z": () => (__WEBPACK_DEFAULT_EXPORT__)
-/* harmony export */ });
-/* harmony import */ var _actions_exec__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(514);
-
-
-/* Get the state of a container with the specified name. */
-async function getContainerState(containerName) {
-    const options = {
-        silent: true,
-    };
-
-    const execOutput = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.getExecOutput(
-        'docker',
-        ['inspect', '--format={{json .State}}', containerName],
-        options
-    );
-
-    if (execOutput.exitCode !== 0) {
-        throw new Error(
-            `Failed getting container state: ${containerName}: ${execOutput.exitCode}: ${execOutput.stderr}`
-        );
-    }
-
-    return JSON.parse(execOutput.stdout);
-}
-
-async function stopContainer(containerName) {
-    const options = {
-        silent: true,
-    };
-    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec(
-        'docker',
-        ['container', 'stop', containerName],
-        options
-    );
-    if (exitCode !== 0) {
-        throw new Error(`Failed stopping container: ${containerName}`);
-    }
-}
-
-async function removeContainer(containerName) {
-    const options = {
-        silent: true,
-    };
-    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec(
-        'docker',
-        ['container', 'rm', containerName],
-        options
-    );
-    if (exitCode !== 0) {
-        throw new Error(`Failed removing container: ${containerName}`);
-    }
-}
-
-async function getContainerLogs(containerName) {
-    const execOutput = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.getExecOutput(
-        'docker',
-        ['container', 'logs', containerName],
-        {
-            silent: true,
-            maxBuffer: 1024 * 1024 * 200,
-        }
-    );
-    if (execOutput.exitCode !== 0) {
-        throw new Error(
-            `Failed getting container logs: ${containerName}: ${execOutput.exitCode}: ${execOutput.stderr}`
-        );
-    }
-    return {
-        stderr: execOutput.stderr,
-        stdout: execOutput.stdout,
-    };
-}
-
-async function imagePull(image) {
-    const options = {
-        silent: true,
-    };
-    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec(
-        'docker',
-        ['image', 'pull', '--quiet', image],
-        options
-    );
-    if (exitCode !== 0) {
-        throw new Error(`Docker image pull failed: ${exitCode}`);
-    }
-}
-
-async function login(username, password) {
-    const options = {
-        silent: true,
-    };
-    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec(
-        'docker',
-        ['login', '--username', username, '--password', password],
-        options
-    );
-    if (exitCode !== 0) {
-        throw new Error(`Docker login failed: ${exitCode}`);
-    }
-}
-
-/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
-    login: login,
-    imagePull: imagePull,
-    getContainerState: getContainerState,
-    stopContainer: stopContainer,
-    removeContainer: removeContainer,
-    getContainerLogs: getContainerLogs,
-    CONTAINER_STATUS_HEALTHY: 'healthy',
-    CONTAINER_STATUS_EXITED: 'exited',
-});
-
-
-/***/ }),
-
 /***/ 103:
 /***/ ((__webpack_module__, __unused_webpack___webpack_exports__, __nccwpck_require__) => {
 
 __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependencies__) => {
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(186);
 /* harmony import */ var _actions_exec__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(514);
-/* harmony import */ var _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(313);
-/* harmony import */ var _poll_poll_js__WEBPACK_IMPORTED_MODULE_5__ = __nccwpck_require__(884);
-/* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(147);
-/* harmony import */ var _actions_http_client__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(255);
-
-
+/* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(147);
+/* harmony import */ var _actions_http_client__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(255);
 
 
 
@@ -4165,22 +4041,16 @@ const CIMON_SCRIPT_DOWNLOAD_URL =
 const CIMON_SCRIPT_PATH = '/tmp/install.sh';
 const CIMON_SUBCMD = 'agent';
 
-const httpClient = new _actions_http_client__WEBPACK_IMPORTED_MODULE_4__.HttpClient('cimon-action');
+const httpClient = new _actions_http_client__WEBPACK_IMPORTED_MODULE_3__.HttpClient('cimon-action');
 
 async function downloadToFile(url, filePath) {
     const response = await httpClient.get(url);
     const responseBody = await response.readBody();
-    fs__WEBPACK_IMPORTED_MODULE_3__.writeFileSync(filePath, responseBody);
+    fs__WEBPACK_IMPORTED_MODULE_2__.writeFileSync(filePath, responseBody);
 }
 
 function getActionConfig() {
     return {
-        docker: {
-            image: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('docker-image'),
-            imagePull: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('docker-image-pull'),
-            username: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('docker-username'),
-            password: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('docker-password'),
-        },
         github: {
             token: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('github-token'),
             jobSummary: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-job-summary'),
@@ -4217,16 +4087,6 @@ async function sudoExists() {
 }
 
 async function run(config) {
-    if (_actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('run-as-container')) {
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running in a docker mode');
-        await runInDocker(config);
-    } else {
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running in a native mode');
-        await runInHost(config);
-    }
-}
-
-async function runInHost(config) {
     await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
 
     const env = {
@@ -4300,146 +4160,6 @@ async function runInHost(config) {
     }
 }
 
-async function runInDocker(config) {
-    if (config.docker.username !== '' && config.docker.password !== '') {
-        await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].login */ .Z.login(config.docker.username, config.docker.password);
-    }
-
-    if (config.docker.imagePull) {
-        await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].imagePull */ .Z.imagePull(config.docker.image);
-    }
-
-    const envOutput = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.getExecOutput('env', [], {
-        silent: true,
-    });
-    if (envOutput.exitCode !== 0) {
-        throw new Error(
-            `Failed fetching environment variables: ${envOutput.exitCode}: ${envOutput.stderr}`
-        );
-    }
-    fs__WEBPACK_IMPORTED_MODULE_3__.writeFileSync('/tmp/.env', envOutput.stdout);
-
-    const args = [
-        'container',
-        'run',
-        '--detach',
-        '--name',
-        'cimon',
-        '--privileged',
-        '--pid=host',
-        '--network=host',
-        '--cgroupns=host',
-        '--volume',
-        '/sys/kernel/debug:/sys/kernel/debug:ro',
-        '--volume',
-        `${process.env['RUNNER_TEMP']}:${process.env['RUNNER_TEMP']}`,
-        '--env',
-        `CIMON_LOG_LEVEL=${config.cimon.logLevel}`,
-        '--env',
-        `GITHUB_TOKEN=${config.github.token}`,
-        '--env-file',
-        `/tmp/.env`,
-    ];
-
-    if (config.cimon.preventionMode) {
-        args.push('--env', 'CIMON_PREVENT=1');
-    }
-
-    if (config.cimon.allowedIPs !== '') {
-        args.push('--env', `CIMON_ALLOWED_IPS=${config.cimon.allowedIPs}`);
-    }
-
-    if (config.cimon.allowedHosts !== '') {
-        args.push('--env', `CIMON_ALLOWED_HOSTS=${config.cimon.allowedHosts}`);
-    }
-
-    if (config.cimon.ignoredIPNets !== '') {
-        args.push(
-            '--env',
-            `CIMON_IGNORED_IP_NETS=${config.cimon.ignoredIPNets}`
-        );
-    }
-
-    if (config.github.jobSummary) {
-        args.push('--env', 'CIMON_REPORT_GITHUB_JOB_SUMMARY=1');
-    }
-
-    if (config.report.processTree) {
-        args.push('--env', 'CIMON_REPORT_PROCESS_TREE=1');
-    }
-
-    if (config.report.slackWebhookEndpoint) {
-        args.push(
-            '--env',
-            `CIMON_SLACK_WEBHOOK_ENDPOINT=${config.report.slackWebhookEndpoint}`
-        );
-    }
-
-    if (config.cimon.applyFsEvents) {
-        args.push('--env', 'CIMON_APPLY_FS_EVENTS=1');
-    }
-
-    if (config.cimon.clientId !== '') {
-        args.push('--env', `CIMON_CLIENT_ID=${config.cimon.clientId}`);
-    }
-
-    if (config.cimon.secret !== '') {
-        args.push('--env', `CIMON_SECRET=${config.cimon.secret}`);
-    }
-
-    if (config.cimon.url !== '') {
-        args.push('--env', `CIMON_URL=${config.cimon.url}`);
-    }
-
-    if (config.cimon.featureGates !== '') {
-        args.push('--env', `CIMON_FEATURE_GATES=${config.cimon.featureGates}`);
-    }
-
-    args.push(config.docker.image);
-
-    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('docker', args, {
-        silent: false,
-    });
-
-    if (exitCode !== 0) {
-        throw new Error(
-            'Failed executing docker run command for Cimon container'
-        );
-    }
-
-    fs__WEBPACK_IMPORTED_MODULE_3__.unlinkSync('/tmp/.env');
-
-    const health = await (0,_poll_poll_js__WEBPACK_IMPORTED_MODULE_5__/* ["default"] */ .Z)(
-        async () => {
-            const state = await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].getContainerState */ .Z.getContainerState('cimon');
-            _actions_core__WEBPACK_IMPORTED_MODULE_0__.debug(
-                `Checking Cimon health status: ${state.Health.Status} ...`
-            );
-            return state.Health;
-        },
-        (health) => {
-            return health.Status !== _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].CONTAINER_STATUS_HEALTHY */ .Z.CONTAINER_STATUS_HEALTHY;
-        },
-        1000,
-        45 * 1000
-    );
-
-    if (health.Status !== _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].CONTAINER_STATUS_HEALTHY */ .Z.CONTAINER_STATUS_HEALTHY) {
-        const log = health.Log;
-        let message =
-            'Failed reaching healthy container status for Cimon container';
-        if (Array.isArray(log) && log.length > 0) {
-            const latestEntry = log[0];
-            message += `: exit code: ${latestEntry.ExitCode}: ${latestEntry.Output}`;
-        }
-        throw new Error(message);
-    }
-
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(
-        `Build runtime security agent started successfully: ${config.docker.image}`
-    );
-}
-
 try {
     await run(getActionConfig());
 } catch (error) {
@@ -4452,44 +4172,6 @@ try {
 
 __webpack_handle_async_dependencies__();
 }, 1);
-
-/***/ }),
-
-/***/ 884:
-/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
-
-/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
-/* harmony export */   "Z": () => (/* binding */ poll)
-/* harmony export */ });
-async function poll(fn, fnCondition, interval = 1000, timeout = 5000) {
-    let hasTimedOut = false;
-    let timeoutID;
-
-    timeoutID = setTimeout(() => {
-        hasTimedOut = true;
-    }, timeout);
-
-    try {
-        let result = await fn();
-        while (fnCondition(result)) {
-            if (hasTimedOut) {
-                break;
-            }
-            await wait(interval);
-            result = await fn();
-        }
-        return result;
-    } finally {
-        clearTimeout(timeoutID);
-    }
-}
-
-function wait(ms = 1000) {
-    return new Promise(resolve => {
-        setTimeout(resolve, ms);
-    });
-}
-
 
 /***/ })
 
@@ -4598,23 +4280,6 @@ function wait(ms = 1000) {
 /******/ 		}).then(outerResolve, reject);
 /******/ 		isEvaluating = false;
 /******/ 	};
-/******/ })();
-/******/ 
-/******/ /* webpack/runtime/define property getters */
-/******/ (() => {
-/******/ 	// define getter functions for harmony exports
-/******/ 	__nccwpck_require__.d = (exports, definition) => {
-/******/ 		for(var key in definition) {
-/******/ 			if(__nccwpck_require__.o(definition, key) && !__nccwpck_require__.o(exports, key)) {
-/******/ 				Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
-/******/ 			}
-/******/ 		}
-/******/ 	};
-/******/ })();
-/******/ 
-/******/ /* webpack/runtime/hasOwnProperty shorthand */
-/******/ (() => {
-/******/ 	__nccwpck_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
 /******/ })();
 /******/ 
 /******/ /* webpack/runtime/compat */

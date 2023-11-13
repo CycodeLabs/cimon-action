@@ -4023,175 +4023,13 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("util");
 
 /***/ }),
 
-/***/ 313:
-/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
-
-/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
-/* harmony export */   "Z": () => (__WEBPACK_DEFAULT_EXPORT__)
-/* harmony export */ });
-/* harmony import */ var _actions_exec__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(514);
-
-
-/* Get the state of a container with the specified name. */
-async function getContainerState(containerName) {
-    const options = {
-        silent: true,
-    };
-
-    const execOutput = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.getExecOutput(
-        'docker',
-        ['inspect', '--format={{json .State}}', containerName],
-        options
-    );
-
-    if (execOutput.exitCode !== 0) {
-        throw new Error(
-            `Failed getting container state: ${containerName}: ${execOutput.exitCode}: ${execOutput.stderr}`
-        );
-    }
-
-    return JSON.parse(execOutput.stdout);
-}
-
-async function stopContainer(containerName) {
-    const options = {
-        silent: true,
-    };
-    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec(
-        'docker',
-        ['container', 'stop', containerName],
-        options
-    );
-    if (exitCode !== 0) {
-        throw new Error(`Failed stopping container: ${containerName}`);
-    }
-}
-
-async function removeContainer(containerName) {
-    const options = {
-        silent: true,
-    };
-    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec(
-        'docker',
-        ['container', 'rm', containerName],
-        options
-    );
-    if (exitCode !== 0) {
-        throw new Error(`Failed removing container: ${containerName}`);
-    }
-}
-
-async function getContainerLogs(containerName) {
-    const execOutput = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.getExecOutput(
-        'docker',
-        ['container', 'logs', containerName],
-        {
-            silent: true,
-            maxBuffer: 1024 * 1024 * 200,
-        }
-    );
-    if (execOutput.exitCode !== 0) {
-        throw new Error(
-            `Failed getting container logs: ${containerName}: ${execOutput.exitCode}: ${execOutput.stderr}`
-        );
-    }
-    return {
-        stderr: execOutput.stderr,
-        stdout: execOutput.stdout,
-    };
-}
-
-async function imagePull(image) {
-    const options = {
-        silent: true,
-    };
-    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec(
-        'docker',
-        ['image', 'pull', '--quiet', image],
-        options
-    );
-    if (exitCode !== 0) {
-        throw new Error(`Docker image pull failed: ${exitCode}`);
-    }
-}
-
-async function login(username, password) {
-    const options = {
-        silent: true,
-    };
-    const exitCode = await _actions_exec__WEBPACK_IMPORTED_MODULE_0__.exec(
-        'docker',
-        ['login', '--username', username, '--password', password],
-        options
-    );
-    if (exitCode !== 0) {
-        throw new Error(`Docker login failed: ${exitCode}`);
-    }
-}
-
-/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
-    login: login,
-    imagePull: imagePull,
-    getContainerState: getContainerState,
-    stopContainer: stopContainer,
-    removeContainer: removeContainer,
-    getContainerLogs: getContainerLogs,
-    CONTAINER_STATUS_HEALTHY: 'healthy',
-    CONTAINER_STATUS_EXITED: 'exited',
-});
-
-
-/***/ }),
-
-/***/ 884:
-/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
-
-/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
-/* harmony export */   "Z": () => (/* binding */ poll)
-/* harmony export */ });
-async function poll(fn, fnCondition, interval = 1000, timeout = 5000) {
-    let hasTimedOut = false;
-    let timeoutID;
-
-    timeoutID = setTimeout(() => {
-        hasTimedOut = true;
-    }, timeout);
-
-    try {
-        let result = await fn();
-        while (fnCondition(result)) {
-            if (hasTimedOut) {
-                break;
-            }
-            await wait(interval);
-            result = await fn();
-        }
-        return result;
-    } finally {
-        clearTimeout(timeoutID);
-    }
-}
-
-function wait(ms = 1000) {
-    return new Promise(resolve => {
-        setTimeout(resolve, ms);
-    });
-}
-
-
-/***/ }),
-
 /***/ 40:
 /***/ ((__webpack_module__, __unused_webpack___webpack_exports__, __nccwpck_require__) => {
 
 __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependencies__) => {
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(186);
 /* harmony import */ var _actions_exec__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(514);
-/* harmony import */ var _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(313);
-/* harmony import */ var _poll_poll_js__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(884);
-/* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(147);
-
-
+/* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(147);
 
 
 
@@ -4219,16 +4057,6 @@ async function sudoExists() {
 }
 
 async function run(config) {
-    if (_actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('run-as-container')) {
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running in a docker mode');
-        await runInDocker(config);
-    } else {
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running in a native mode');
-        await runInHost(config);
-    }
-}
-
-async function runInHost(config) {
     const env = {
         ...process.env,
         CIMON_LOG_LEVEL: config.cimon.logLevel,
@@ -4252,45 +4080,11 @@ async function runInHost(config) {
             silent: false,
         });
     }
-    fs__WEBPACK_IMPORTED_MODULE_3__.rmSync(CIMON_SCRIPT_PATH);
+    fs__WEBPACK_IMPORTED_MODULE_2__.rmSync(CIMON_SCRIPT_PATH);
 
     if (retval !== 0) {
         throw new Error(`Failed stopping Cimon process: ${retval}`);
     }
-}
-
-async function runInDocker(config) {
-    await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].stopContainer */ .Z.stopContainer('cimon');
-
-    const logs = await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].getContainerLogs */ .Z.getContainerLogs('cimon');
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(logs.stdout);
-
-    const containerState = await (0,_poll_poll_js__WEBPACK_IMPORTED_MODULE_4__/* ["default"] */ .Z)(
-        async () => {
-            const state = await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].getContainerState */ .Z.getContainerState('cimon');
-            _actions_core__WEBPACK_IMPORTED_MODULE_0__.debug(`Checking Cimon state: ${state.Status} ...`);
-            return state;
-        },
-        (state) => {
-            return state.Status !== _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].CONTAINER_STATUS_EXITED */ .Z.CONTAINER_STATUS_EXITED;
-        },
-        1000,
-        30 * 1000
-    );
-
-    await _docker_docker_js__WEBPACK_IMPORTED_MODULE_2__/* ["default"].removeContainer */ .Z.removeContainer('cimon');
-
-    if (logs.stderr !== '') {
-        throw new Error(logs.stderr);
-    }
-
-    if (containerState.ExitCode !== 0) {
-        throw new Error(
-            `Container exited with error: ${containerState.ExitCode}`
-        );
-    }
-
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Build runtime security agent finished successfully`);
 }
 
 try {
@@ -4421,23 +4215,6 @@ __webpack_handle_async_dependencies__();
 /******/ 		}).then(outerResolve, reject);
 /******/ 		isEvaluating = false;
 /******/ 	};
-/******/ })();
-/******/ 
-/******/ /* webpack/runtime/define property getters */
-/******/ (() => {
-/******/ 	// define getter functions for harmony exports
-/******/ 	__nccwpck_require__.d = (exports, definition) => {
-/******/ 		for(var key in definition) {
-/******/ 			if(__nccwpck_require__.o(definition, key) && !__nccwpck_require__.o(exports, key)) {
-/******/ 				Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
-/******/ 			}
-/******/ 		}
-/******/ 	};
-/******/ })();
-/******/ 
-/******/ /* webpack/runtime/hasOwnProperty shorthand */
-/******/ (() => {
-/******/ 	__nccwpck_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
 /******/ })();
 /******/ 
 /******/ /* webpack/runtime/compat */

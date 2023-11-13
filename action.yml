@@ -52,20 +52,6 @@ inputs:
     description: Enable processing filesystem events and display them in the process tree report
     required: false
     default: 'false'
-  docker-image:
-    description: Docker image reference
-    required: true
-    default: docker.io/cycodelabs/cimon:v0.9.5
-  docker-image-pull:
-    description: Skip pulling image from registry (Used for debugging)
-    required: false
-    default: 'false'
-  docker-username:
-    description: Username to pull image from registry (Used for debugging)
-    required: false
-  docker-password:
-    description: Password to pull image from registry (Used for debugging)
-    required: false
   log-level:
     description: Log level (Used for debugging)
     required: false
@@ -77,10 +63,6 @@ inputs:
     description: Fail the CI if Cimon encountered an error
     required: false
     default: 'false'
-  run-as-container:
-    description: Run cimon as docker container (instead of running natively)
-    required: false
-    default: 'true'
   release-path:
     description: Path to Cimon release file (Used for debugging)
     required: false
