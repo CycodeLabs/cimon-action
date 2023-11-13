@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify-standard:
+  verify:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout Code
@@ -32,28 +32,6 @@ jobs:
             registry.npmjs.org
           report-process-tree: true
           fail-on-error: true
-
-      - name: Test
-        run: |
-          curl -I https://api.github.com
-          curl -I https://cycode.com
-          wget --quiet --timeout 1 https://registry.npmjs.org || true
-
-  verify-standard-native:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
-
-      - name: Run Cimon
-        uses: ./
-        with:
-          client-id: ${{ secrets.CIMON_CLIENT_ID }}
-          secret: ${{ secrets.CIMON_SECRET }}
-          report-process-tree: true
-          fail-on-error: true
-          run-as-container: false
-          log-level: debug
 
       - name: Test
         run: |
