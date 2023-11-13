@@ -1,7 +1,5 @@
 import core from '@actions/core';
 import exec from '@actions/exec';
-import docker from '../docker/docker.js';
-import poll from '../poll/poll.js';
 import fs from 'fs';
 
 const CIMON_SCRIPT_PATH = '/tmp/install.sh';
@@ -27,16 +25,6 @@ async function sudoExists() {
 }
 
 async function run(config) {
-    if (core.getBooleanInput('run-as-container')) {
-        core.info('Running in a docker mode');
-        await runInDocker(config);
-    } else {
-        core.info('Running in a native mode');
-        await runInHost(config);
-    }
-}
-
-async function runInHost(config) {
     const env = {
         ...process.env,
         CIMON_LOG_LEVEL: config.cimon.logLevel,
@@ -65,40 +53,6 @@ async function runInHost(config) {
     if (retval !== 0) {
         throw new Error(`Failed stopping Cimon process: ${retval}`);
     }
-}
-
-async function runInDocker(config) {
-    await docker.stopContainer('cimon');
-
-    const logs = await docker.getContainerLogs('cimon');
-    core.info(logs.stdout);
-
-    const containerState = await poll(
-        async () => {
-            const state = await docker.getContainerState('cimon');
-            core.debug(`Checking Cimon state: ${state.Status} ...`);
-            return state;
-        },
-        (state) => {
-            return state.Status !== docker.CONTAINER_STATUS_EXITED;
-        },
-        1000,
-        30 * 1000
-    );
-
-    await docker.removeContainer('cimon');
-
-    if (logs.stderr !== '') {
-        throw new Error(logs.stderr);
-    }
-
-    if (containerState.ExitCode !== 0) {
-        throw new Error(
-            `Container exited with error: ${containerState.ExitCode}`
-        );
-    }
-
-    core.info(`Build runtime security agent finished successfully`);
 }
 
 try {

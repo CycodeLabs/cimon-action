@@ -1,7 +1,5 @@
 import core from '@actions/core';
 import exec from '@actions/exec';
-import docker from '../docker/docker.js';
-import poll from '../poll/poll.js';
 import fs from 'fs';
 import * as http from '@actions/http-client';
 
@@ -20,12 +18,6 @@ async function downloadToFile(url, filePath) {
 
 function getActionConfig() {
     return {
-        docker: {
-            image: core.getInput('docker-image'),
-            imagePull: core.getBooleanInput('docker-image-pull'),
-            username: core.getInput('docker-username'),
-            password: core.getInput('docker-password'),
-        },
         github: {
             token: core.getInput('github-token'),
             jobSummary: core.getBooleanInput('report-job-summary'),
@@ -62,16 +54,6 @@ async function sudoExists() {
 }
 
 async function run(config) {
-    if (core.getBooleanInput('run-as-container')) {
-        core.info('Running in a docker mode');
-        await runInDocker(config);
-    } else {
-        core.info('Running in a native mode');
-        await runInHost(config);
-    }
-}
-
-async function runInHost(config) {
     await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
 
     const env = {
@@ -143,146 +125,6 @@ async function runInHost(config) {
     if (retval !== 0) {
         throw new Error(`Failed starting Cimon process: ${exitCode}`);
     }
-}
-
-async function runInDocker(config) {
-    if (config.docker.username !== '' && config.docker.password !== '') {
-        await docker.login(config.docker.username, config.docker.password);
-    }
-
-    if (config.docker.imagePull) {
-        await docker.imagePull(config.docker.image);
-    }
-
-    const envOutput = await exec.getExecOutput('env', [], {
-        silent: true,
-    });
-    if (envOutput.exitCode !== 0) {
-        throw new Error(
-            `Failed fetching environment variables: ${envOutput.exitCode}: ${envOutput.stderr}`
-        );
-    }
-    fs.writeFileSync('/tmp/.env', envOutput.stdout);
-
-    const args = [
-        'container',
-        'run',
-        '--detach',
-        '--name',
-        'cimon',
-        '--privileged',
-        '--pid=host',
-        '--network=host',
-        '--cgroupns=host',
-        '--volume',
-        '/sys/kernel/debug:/sys/kernel/debug:ro',
-        '--volume',
-        `${process.env['RUNNER_TEMP']}:${process.env['RUNNER_TEMP']}`,
-        '--env',
-        `CIMON_LOG_LEVEL=${config.cimon.logLevel}`,
-        '--env',
-        `GITHUB_TOKEN=${config.github.token}`,
-        '--env-file',
-        `/tmp/.env`,
-    ];
-
-    if (config.cimon.preventionMode) {
-        args.push('--env', 'CIMON_PREVENT=1');
-    }
-
-    if (config.cimon.allowedIPs !== '') {
-        args.push('--env', `CIMON_ALLOWED_IPS=${config.cimon.allowedIPs}`);
-    }
-
-    if (config.cimon.allowedHosts !== '') {
-        args.push('--env', `CIMON_ALLOWED_HOSTS=${config.cimon.allowedHosts}`);
-    }
-
-    if (config.cimon.ignoredIPNets !== '') {
-        args.push(
-            '--env',
-            `CIMON_IGNORED_IP_NETS=${config.cimon.ignoredIPNets}`
-        );
-    }
-
-    if (config.github.jobSummary) {
-        args.push('--env', 'CIMON_REPORT_GITHUB_JOB_SUMMARY=1');
-    }
-
-    if (config.report.processTree) {
-        args.push('--env', 'CIMON_REPORT_PROCESS_TREE=1');
-    }
-
-    if (config.report.slackWebhookEndpoint) {
-        args.push(
-            '--env',
-            `CIMON_SLACK_WEBHOOK_ENDPOINT=${config.report.slackWebhookEndpoint}`
-        );
-    }
-
-    if (config.cimon.applyFsEvents) {
-        args.push('--env', 'CIMON_APPLY_FS_EVENTS=1');
-    }
-
-    if (config.cimon.clientId !== '') {
-        args.push('--env', `CIMON_CLIENT_ID=${config.cimon.clientId}`);
-    }
-
-    if (config.cimon.secret !== '') {
-        args.push('--env', `CIMON_SECRET=${config.cimon.secret}`);
-    }
-
-    if (config.cimon.url !== '') {
-        args.push('--env', `CIMON_URL=${config.cimon.url}`);
-    }
-
-    if (config.cimon.featureGates !== '') {
-        args.push('--env', `CIMON_FEATURE_GATES=${config.cimon.featureGates}`);
-    }
-
-    args.push(config.docker.image);
-
-    const exitCode = await exec.exec('docker', args, {
-        silent: false,
-    });
-
-    if (exitCode !== 0) {
-        throw new Error(
-            'Failed executing docker run command for Cimon container'
-        );
-    }
-
-    fs.unlinkSync('/tmp/.env');
-
-    const health = await poll(
-        async () => {
-            const state = await docker.getContainerState('cimon');
-            core.debug(
-                `Checking Cimon health status: ${state.Health.Status} ...`
-            );
-            return state.Health;
-        },
-        (health) => {
-            return health.Status !== docker.CONTAINER_STATUS_HEALTHY;
-        },
-        1000,
-        45 * 1000
-    );
-
-    if (health.Status !== docker.CONTAINER_STATUS_HEALTHY) {
-        const log = health.Log;
-        let message =
-            'Failed reaching healthy container status for Cimon container';
-        if (Array.isArray(log) && log.length > 0) {
-            const latestEntry = log[0];
-            message += `: exit code: ${latestEntry.ExitCode}: ${latestEntry.Output}`;
-        }
-        throw new Error(message);
-    }
-
-    core.info(
-        `Build runtime security agent started successfully: ${config.docker.image}`
-    );
 }
 
 try {
