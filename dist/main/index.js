@@ -4156,7 +4156,7 @@ async function run(config) {
     }
 
     if (retval !== 0) {
-        throw new Error(`Failed starting Cimon process: ${exitCode}`);
+        throw new Error(`Failed starting Cimon process: ${retval}`);
     }
 }
 
