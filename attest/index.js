@@ -45,6 +45,17 @@ function getActionConfig() {
     };
 }
 
+async function sudoExists() {
+    try {
+        const retval = await exec.exec('sudo', ['-v'], {
+            silent: true,
+        });
+        return retval === 0;
+    } catch (error) {
+        return false;
+    }
+}
+
 async function run(config) {
     await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
 
@@ -65,18 +76,50 @@ async function run(config) {
         GITHUB_TOKEN: config.github.token,
     };
 
+    var retval;
+    const sudo = await sudoExists();
     const options = {
         env,
     };
 
     if (config.cimon.releasePath != '') {
-        await exec.exec(
-            'bash',
-            [CIMON_SCRIPT_PATH, CIMON_SUBCMD, config.cimon.releasePath],
-            options
+        core.info(
+            `Running Cimon from release path: ${config.cimon.releasePath}`
         );
+        if (sudo) {
+            retval = await exec.exec(
+                'sudo',
+                [
+                    '-E',
+                    'sh',
+                    CIMON_SCRIPT_PATH,
+                    CIMON_SUBCMD,
+                    config.cimon.releasePath,
+                ],
+                options
+            );
+        } else {
+            retval = await exec.exec(
+                'sh',
+                [CIMON_SCRIPT_PATH, CIMON_SUBCMD, config.cimon.releasePath],
+                options
+            );
+        }
     } else {
-        await exec.exec('bash', [CIMON_SCRIPT_PATH, CIMON_SUBCMD], options);
+        core.info('Running Cimon from latest release path');
+        if (sudo) {
+            retval = await exec.exec(
+                'sudo',
+                ['-E', 'sh', CIMON_SCRIPT_PATH, CIMON_SUBCMD],
+                options
+            );
+        } else {
+            retval = await exec.exec(
+                'sh',
+                [CIMON_SCRIPT_PATH, CIMON_SUBCMD],
+                options
+            );
+        }
     }
     fs.rmSync(CIMON_SCRIPT_PATH);
 

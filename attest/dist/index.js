@@ -10871,6 +10871,17 @@ function getActionConfig() {
     };
 }
 
+async function sudoExists() {
+    try {
+        const retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sudo', ['-v'], {
+            silent: true,
+        });
+        return retval === 0;
+    } catch (error) {
+        return false;
+    }
+}
+
 async function run(config) {
     await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
 
@@ -10891,18 +10902,50 @@ async function run(config) {
         GITHUB_TOKEN: config.github.token,
     };
 
+    var retval;
+    const sudo = await sudoExists();
     const options = {
         env,
     };
 
     if (config.cimon.releasePath != '') {
-        await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(
-            'bash',
-            [CIMON_SCRIPT_PATH, CIMON_SUBCMD, config.cimon.releasePath],
-            options
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(
+            `Running Cimon from release path: ${config.cimon.releasePath}`
         );
+        if (sudo) {
+            retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(
+                'sudo',
+                [
+                    '-E',
+                    'sh',
+                    CIMON_SCRIPT_PATH,
+                    CIMON_SUBCMD,
+                    config.cimon.releasePath,
+                ],
+                options
+            );
+        } else {
+            retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(
+                'sh',
+                [CIMON_SCRIPT_PATH, CIMON_SUBCMD, config.cimon.releasePath],
+                options
+            );
+        }
     } else {
-        await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('bash', [CIMON_SCRIPT_PATH, CIMON_SUBCMD], options);
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running Cimon from latest release path');
+        if (sudo) {
+            retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(
+                'sudo',
+                ['-E', 'sh', CIMON_SCRIPT_PATH, CIMON_SUBCMD],
+                options
+            );
+        } else {
+            retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(
+                'sh',
+                [CIMON_SCRIPT_PATH, CIMON_SUBCMD],
+                options
+            );
+        }
     }
     fs__WEBPACK_IMPORTED_MODULE_5__.rmSync(CIMON_SCRIPT_PATH);
 
