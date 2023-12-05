@@ -20,7 +20,8 @@ inputs:
     default: ''
   subjects:
     description: A white space seperated list of paths, or base64-encoded subjects. Either subjects or imageRef are required
-    required: true
+    required: false
+    default: ''
   image-ref:
     description: The container reference to generate provenance for. Either subjects or imageRef are required
     required: false
