@@ -6,28 +6,15 @@
 
 By utilizing the revolutionary eBPF technology, Cimon monitors and mitigates attacks within the kernel, denying access to users' assets as soon as they arise.
 
-Get started by installing the [GitHub App](https://github.com/apps/cimon-by-cycode), or learn more in our docs section - https://docs.cimon.build.
-
 This action helps seamlessly deploy the agent into any desired GitHub Actions build. The action is based on the NodeJS engine and contains simple `pre` and `post` scripts to deploy and gracefully shut down the agent.
+
+Learn more about Cimon in our [docs](https://docs.cimon.build).
 
 ## 🏃‍♂️ Getting Started with Cimon
 
-Here's a simple three-step process to begin securing your GitHub Actions pipeline:
-
--   Step 1 - Install Cimon [GitHub App](https://github.com/apps/cimon-by-cycode). You will be directed to the Cimon platform once the process is complete.
--   Step 2 - Generate an API key in the Cimon Platform, which consists of a client ID and a secret. These keys are used to authenticate the user and should be securely stored as GitHub Actions secrets.
--   Step 3 - Add Cimon action to your workflow as the first step
+Getting started with Cimon is as simple as introducing a single step in the pipeline. Cimon Action should be the first step in each of your jobs.
 
 We recommend starting Cimon in “Detect Mode” to allow it to learn your environment before applying preventive policies.
-
-```yaml
-- uses: cycodelabs/cimon-action@v0
-  with:
-      client-id: ${{ secrets.CIMON_CLIENT_ID }}
-      secret: ${{ secrets.CIMON_SECRET }}
-```
-
-OR
 
 ```yaml
 - uses: cycodelabs/cimon-action@v0
@@ -57,21 +44,11 @@ The action supports the following parameters:
 
 ## ⚙️ Scenarios
 
-### Running Cimon locally
-
-```yaml
-steps:
-    - uses: cycodelabs/cimon-action@v0
-```
-
 ### Running Cimon on detect mode
 
 ```yaml
 steps:
     - uses: cycodelabs/cimon-action@v0
-      with:
-          client-id: ${{ secrets.CIMON_CLIENT_ID }}
-          secret: ${{ secrets.CIMON_SECRET }}
 ```
 
 ### Running Cimon on prevent mode
@@ -80,8 +57,6 @@ steps:
 steps:
     - uses: cycodelabs/cimon-action@v0
       with:
-          client-id: ${{ secrets.CIMON_CLIENT_ID }}
-          secret: ${{ secrets.CIMON_SECRET }}
           prevent: true
           allowed-hosts: >
               cycode.com
@@ -93,10 +68,20 @@ steps:
 steps:
     - uses: cycodelabs/cimon-action@v0
       with:
-          client-id: ${{ secrets.CIMON_CLIENT_ID }}
-          secret: ${{ secrets.CIMON_SECRET }}
           report-process-tree: true
           apply-fs-events: true
+```
+
+### Running Cimon with enhanced Cycode capabiltiies
+
+You can read more about it [here](https://docs.cimon.build/#cimon-with-cycode).
+
+```yaml
+steps:
+    - uses: cycodelabs/cimon-action@v0
+      with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
 ```
 
 ## 🛡️ Security Report
