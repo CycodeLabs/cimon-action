@@ -4034,8 +4034,11 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 
 
 
+const CIMON_SCRIPT_DOWNLOAD_URL =
+    'https://cimon-releases.s3.amazonaws.com/install.sh';
 const CIMON_SCRIPT_PATH = '/tmp/install.sh';
-const CIMON_SUBCMD = 'stop';
+const CIMON_EXECUTABLE_DIR = '/tmp/cimon';
+const CIMON_EXECUTABLE_PATH = '/tmp/cimon/cimon';
 
 function getActionConfig() {
     return {
@@ -4057,6 +4060,24 @@ async function sudoExists() {
 }
 
 async function run(config) {
+    if (!fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(CIMON_SCRIPT_PATH)) {
+        await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
+    }
+
+    if (!fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(CIMON_EXECUTABLE_DIR)) {
+        let params = [CIMON_SCRIPT_PATH, '-b', CIMON_EXECUTABLE_DIR];
+        if (
+            config.cimon.logLevel == 'debug' ||
+            config.cimon.logLevel == 'trace'
+        ) {
+            params.push('-d');
+        }
+        let retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sh', params);
+        if (retval !== 0) {
+            throw new Error(`Failed installing Cimon: ${retval}`);
+        }
+    }
+
     const env = {
         ...process.env,
         CIMON_LOG_LEVEL: config.cimon.logLevel,
@@ -4068,19 +4089,20 @@ async function run(config) {
     if (sudo) {
         retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(
             'sudo',
-            ['-E', 'sh', CIMON_SCRIPT_PATH, CIMON_SUBCMD],
+            ['-E', CIMON_EXECUTABLE_PATH, 'agent', 'stop'],
             {
                 env,
                 silent: false,
             }
         );
     } else {
-        retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sh', [CIMON_SCRIPT_PATH, CIMON_SUBCMD], {
+        retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(CIMON_EXECUTABLE_PATH, ['agent', 'stop'], {
             env,
             silent: false,
         });
     }
     fs__WEBPACK_IMPORTED_MODULE_2__.rmSync(CIMON_SCRIPT_PATH);
+    fs__WEBPACK_IMPORTED_MODULE_2__.rmSync(CIMON_EXECUTABLE_PATH);
 
     if (retval !== 0) {
         throw new Error(`Failed stopping Cimon process: ${retval}`);

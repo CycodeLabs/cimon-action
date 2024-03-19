@@ -10832,9 +10832,10 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 
 
 const CIMON_SCRIPT_DOWNLOAD_URL =
-    'https://cimon-releases.s3.amazonaws.com/run.sh';
+    'https://cimon-releases.s3.amazonaws.com/install.sh';
 const CIMON_SCRIPT_PATH = '/tmp/install.sh';
-const CIMON_SUBCMD = 'attest';
+const CIMON_EXECUTABLE_DIR = '/tmp/cimon';
+const CIMON_EXECUTABLE_PATH = '/tmp/cimon/cimon';
 
 const httpClient = new _actions_http_client__WEBPACK_IMPORTED_MODULE_3__.HttpClient('cimon-action');
 
@@ -10872,7 +10873,43 @@ function getActionConfig() {
 }
 
 async function run(config) {
-    await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
+    let releasePath;
+
+    if (config.cimon.releasePath != '') {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(
+            `Running Cimon from release path: ${config.cimon.releasePath}`
+        );
+
+        if (!fs__WEBPACK_IMPORTED_MODULE_5__.existsSync(config.cimon.releasePath)) {
+            throw new Error(
+                `Cimon release path does not exist: ${config.cimon.releasePath}`
+            );
+        }
+
+        releasePath = config.cimon.releasePath;
+    } else {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running Cimon from latest release path');
+
+        if (!fs__WEBPACK_IMPORTED_MODULE_5__.existsSync(CIMON_SCRIPT_PATH)) {
+            await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
+        }
+
+        if (!fs__WEBPACK_IMPORTED_MODULE_5__.existsSync(CIMON_EXECUTABLE_DIR)) {
+            let params = [CIMON_SCRIPT_PATH, '-b', CIMON_EXECUTABLE_DIR];
+            if (
+                config.cimon.logLevel == 'debug' ||
+                config.cimon.logLevel == 'trace'
+            ) {
+                params.push('-d');
+            }
+            let retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sh', params);
+            if (retval !== 0) {
+                throw new Error(`Failed installing Cimon: ${retval}`);
+            }
+        }
+
+        releasePath = CIMON_EXECUTABLE_PATH;
+    }
 
     const env = {
         ...process.env,
@@ -10895,16 +10932,9 @@ async function run(config) {
         env,
     };
 
-    if (config.cimon.releasePath != '') {
-        await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(
-            'bash',
-            [CIMON_SCRIPT_PATH, CIMON_SUBCMD, config.cimon.releasePath],
-            options
-        );
-    } else {
-        await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('bash', [CIMON_SCRIPT_PATH, CIMON_SUBCMD], options);
-    }
+    await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(releasePath, ['attest'], options);
     fs__WEBPACK_IMPORTED_MODULE_5__.rmSync(CIMON_SCRIPT_PATH);
+    fs__WEBPACK_IMPORTED_MODULE_5__.rmSync(CIMON_EXECUTABLE_PATH);
 
     if (config.report.reportArtifact) {
         _actions_artifact__WEBPACK_IMPORTED_MODULE_2__.create()
