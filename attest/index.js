@@ -6,9 +6,10 @@ import path from 'path';
 import fs from 'fs';
 
 const CIMON_SCRIPT_DOWNLOAD_URL =
-    'https://cimon-releases.s3.amazonaws.com/run.sh';
+    'https://cimon-releases.s3.amazonaws.com/install.sh';
 const CIMON_SCRIPT_PATH = '/tmp/install.sh';
-const CIMON_SUBCMD = 'attest';
+const CIMON_EXECUTABLE_DIR = '/tmp/cimon';
+const CIMON_EXECUTABLE_PATH = '/tmp/cimon/cimon';
 
 const httpClient = new http.HttpClient('cimon-action');
 
@@ -46,7 +47,43 @@ function getActionConfig() {
 }
 
 async function run(config) {
-    await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
+    let releasePath;
+
+    if (config.cimon.releasePath != '') {
+        core.info(
+            `Running Cimon from release path: ${config.cimon.releasePath}`
+        );
+
+        if (!fs.existsSync(config.cimon.releasePath)) {
+            throw new Error(
+                `Cimon release path does not exist: ${config.cimon.releasePath}`
+            );
+        }
+
+        releasePath = config.cimon.releasePath;
+    } else {
+        core.info('Running Cimon from latest release path');
+
+        if (!fs.existsSync(CIMON_SCRIPT_PATH)) {
+            await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
+        }
+
+        if (!fs.existsSync(CIMON_EXECUTABLE_DIR)) {
+            let params = [CIMON_SCRIPT_PATH, '-b', CIMON_EXECUTABLE_DIR];
+            if (
+                config.cimon.logLevel == 'debug' ||
+                config.cimon.logLevel == 'trace'
+            ) {
+                params.push('-d');
+            }
+            let retval = await exec.exec('sh', params);
+            if (retval !== 0) {
+                throw new Error(`Failed installing Cimon: ${retval}`);
+            }
+        }
+
+        releasePath = CIMON_EXECUTABLE_PATH;
+    }
 
     const env = {
         ...process.env,
@@ -69,16 +106,9 @@ async function run(config) {
         env,
     };
 
-    if (config.cimon.releasePath != '') {
-        await exec.exec(
-            'bash',
-            [CIMON_SCRIPT_PATH, CIMON_SUBCMD, config.cimon.releasePath],
-            options
-        );
-    } else {
-        await exec.exec('bash', [CIMON_SCRIPT_PATH, CIMON_SUBCMD], options);
-    }
+    await exec.exec(releasePath, ['attest'], options);
     fs.rmSync(CIMON_SCRIPT_PATH);
+    fs.rmSync(CIMON_EXECUTABLE_PATH);
 
     if (config.report.reportArtifact) {
         artifact

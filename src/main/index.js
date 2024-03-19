@@ -4,9 +4,10 @@ import fs from 'fs';
 import * as http from '@actions/http-client';
 
 const CIMON_SCRIPT_DOWNLOAD_URL =
-    'https://cimon-releases.s3.amazonaws.com/run.sh';
+    'https://cimon-releases.s3.amazonaws.com/install.sh';
 const CIMON_SCRIPT_PATH = '/tmp/install.sh';
-const CIMON_SUBCMD = 'agent';
+const CIMON_EXECUTABLE_DIR = '/tmp/cimon';
+const CIMON_EXECUTABLE_PATH = '/tmp/cimon/cimon';
 
 const httpClient = new http.HttpClient('cimon-action');
 
@@ -54,7 +55,43 @@ async function sudoExists() {
 }
 
 async function run(config) {
-    await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
+    let releasePath;
+
+    if (config.cimon.releasePath != '') {
+        core.info(
+            `Running Cimon from release path: ${config.cimon.releasePath}`
+        );
+
+        if (!fs.existsSync(config.cimon.releasePath)) {
+            throw new Error(
+                `Cimon release path does not exist: ${config.cimon.releasePath}`
+            );
+        }
+
+        releasePath = config.cimon.releasePath;
+    } else {
+        core.info('Running Cimon from latest release path');
+
+        if (!fs.existsSync(CIMON_SCRIPT_PATH)) {
+            await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
+        }
+
+        if (!fs.existsSync(CIMON_EXECUTABLE_DIR)) {
+            let params = [CIMON_SCRIPT_PATH, '-b', CIMON_EXECUTABLE_DIR];
+            if (
+                config.cimon.logLevel == 'debug' ||
+                config.cimon.logLevel == 'trace'
+            ) {
+                params.push('-d');
+            }
+            let retval = await exec.exec('sh', params);
+            if (retval !== 0) {
+                throw new Error(`Failed installing Cimon: ${retval}`);
+            }
+        }
+
+        releasePath = CIMON_EXECUTABLE_PATH;
+    }
 
     const env = {
         ...process.env,
@@ -82,44 +119,18 @@ async function run(config) {
         silent: false,
     };
 
-    if (config.cimon.releasePath) {
-        core.info(
-            `Running Cimon from release path: ${config.cimon.releasePath}`
+    if (sudo) {
+        retval = await exec.exec(
+            'sudo',
+            ['-E', releasePath, 'agent', 'start-background'],
+            options
         );
-        if (sudo) {
-            retval = await exec.exec(
-                'sudo',
-                [
-                    '-E',
-                    'sh',
-                    CIMON_SCRIPT_PATH,
-                    CIMON_SUBCMD,
-                    config.cimon.releasePath,
-                ],
-                options
-            );
-        } else {
-            retval = await exec.exec(
-                'sh',
-                [CIMON_SCRIPT_PATH, CIMON_SUBCMD, config.cimon.releasePath],
-                options
-            );
-        }
     } else {
-        core.info('Running Cimon from latest release path');
-        if (sudo) {
-            retval = await exec.exec(
-                'sudo',
-                ['-E', 'sh', CIMON_SCRIPT_PATH, CIMON_SUBCMD],
-                options
-            );
-        } else {
-            retval = await exec.exec(
-                'sh',
-                [CIMON_SCRIPT_PATH, CIMON_SUBCMD],
-                options
-            );
-        }
+        retval = await exec.exec(
+            releasePath,
+            ['agent', 'start-background'],
+            options
+        );
     }
 
     if (retval !== 0) {
