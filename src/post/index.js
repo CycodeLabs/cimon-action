@@ -2,8 +2,11 @@ import core from '@actions/core';
 import exec from '@actions/exec';
 import fs from 'fs';
 
+const CIMON_SCRIPT_DOWNLOAD_URL =
+    'https://cimon-releases.s3.amazonaws.com/install.sh';
 const CIMON_SCRIPT_PATH = '/tmp/install.sh';
-const CIMON_SUBCMD = 'stop';
+const CIMON_EXECUTABLE_DIR = '/tmp/cimon';
+const CIMON_EXECUTABLE_PATH = '/tmp/cimon/cimon';
 
 function getActionConfig() {
     return {
@@ -25,6 +28,24 @@ async function sudoExists() {
 }
 
 async function run(config) {
+    if (!fs.existsSync(CIMON_SCRIPT_PATH)) {
+        await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
+    }
+
+    if (!fs.existsSync(CIMON_EXECUTABLE_DIR)) {
+        let params = [CIMON_SCRIPT_PATH, '-b', CIMON_EXECUTABLE_DIR];
+        if (
+            config.cimon.logLevel == 'debug' ||
+            config.cimon.logLevel == 'trace'
+        ) {
+            params.push('-d');
+        }
+        let retval = await exec.exec('sh', params);
+        if (retval !== 0) {
+            throw new Error(`Failed installing Cimon: ${retval}`);
+        }
+    }
+
     const env = {
         ...process.env,
         CIMON_LOG_LEVEL: config.cimon.logLevel,
@@ -36,19 +57,20 @@ async function run(config) {
     if (sudo) {
         retval = await exec.exec(
             'sudo',
-            ['-E', 'sh', CIMON_SCRIPT_PATH, CIMON_SUBCMD],
+            ['-E', CIMON_EXECUTABLE_PATH, 'agent', 'stop'],
             {
                 env,
                 silent: false,
             }
         );
     } else {
-        retval = await exec.exec('sh', [CIMON_SCRIPT_PATH, CIMON_SUBCMD], {
+        retval = await exec.exec(CIMON_EXECUTABLE_PATH, ['agent', 'stop'], {
             env,
             silent: false,
         });
     }
     fs.rmSync(CIMON_SCRIPT_PATH);
+    fs.rmSync(CIMON_EXECUTABLE_PATH);
 
     if (retval !== 0) {
         throw new Error(`Failed stopping Cimon process: ${retval}`);
