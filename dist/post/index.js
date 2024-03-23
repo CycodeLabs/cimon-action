@@ -4030,6 +4030,8 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(186);
 /* harmony import */ var _actions_exec__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(514);
 /* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(147);
+/* harmony import */ var _actions_http_client__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(255);
+
 
 
 
@@ -4039,6 +4041,14 @@ const CIMON_SCRIPT_DOWNLOAD_URL =
 const CIMON_SCRIPT_PATH = '/tmp/install.sh';
 const CIMON_EXECUTABLE_DIR = '/tmp/cimon';
 const CIMON_EXECUTABLE_PATH = '/tmp/cimon/cimon';
+
+const httpClient = new _actions_http_client__WEBPACK_IMPORTED_MODULE_3__.HttpClient('cimon-action');
+
+async function downloadToFile(url, filePath) {
+    const response = await httpClient.get(url);
+    const responseBody = await response.readBody();
+    fs__WEBPACK_IMPORTED_MODULE_2__.writeFileSync(filePath, responseBody);
+}
 
 function getActionConfig() {
     return {
