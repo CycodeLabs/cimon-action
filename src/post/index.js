@@ -1,12 +1,21 @@
 import core from '@actions/core';
 import exec from '@actions/exec';
 import fs from 'fs';
+import * as http from '@actions/http-client';
 
 const CIMON_SCRIPT_DOWNLOAD_URL =
     'https://cimon-releases.s3.amazonaws.com/install.sh';
 const CIMON_SCRIPT_PATH = '/tmp/install.sh';
 const CIMON_EXECUTABLE_DIR = '/tmp/cimon';
 const CIMON_EXECUTABLE_PATH = '/tmp/cimon/cimon';
+
+const httpClient = new http.HttpClient('cimon-action');
+
+async function downloadToFile(url, filePath) {
+    const response = await httpClient.get(url);
+    const responseBody = await response.readBody();
+    fs.writeFileSync(filePath, responseBody);
+}
 
 function getActionConfig() {
     return {
