@@ -10933,8 +10933,6 @@ async function run(config) {
     };
 
     await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(releasePath, ['attest'], options);
-    fs__WEBPACK_IMPORTED_MODULE_5__.rmSync(CIMON_SCRIPT_PATH);
-    fs__WEBPACK_IMPORTED_MODULE_5__.rmSync(CIMON_EXECUTABLE_PATH);
 
     if (config.report.reportArtifact) {
         _actions_artifact__WEBPACK_IMPORTED_MODULE_2__.create()

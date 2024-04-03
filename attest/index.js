@@ -107,8 +107,6 @@ async function run(config) {
     };
 
     await exec.exec(releasePath, ['attest'], options);
-    fs.rmSync(CIMON_SCRIPT_PATH);
-    fs.rmSync(CIMON_EXECUTABLE_PATH);
 
     if (config.report.reportArtifact) {
         artifact

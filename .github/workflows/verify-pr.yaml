@@ -57,3 +57,32 @@ jobs:
           report-job-summary: true
           report-artifact: true
           fail-on-error: true
+
+  verify-agent-and-attest:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
+
+      - name: Run Cimon Agent
+        uses: ./
+        with:
+          report-process-tree: true
+          fail-on-error: true
+
+      - name: Create Artifact
+        run: |
+          echo artifact > artifact.txt
+
+      - name: Run Cimon Attest
+        uses: ./attest
+        with:
+          subjects: artifact.txt
+          report-job-summary: true
+          fail-on-error: true
+
+      - name: Test
+        run: |
+          curl -I https://api.github.com
+          curl -I https://cycode.com
+          wget --quiet --timeout 1 https://registry.npmjs.org || true
