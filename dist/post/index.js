@@ -4111,8 +4111,6 @@ async function run(config) {
             silent: false,
         });
     }
-    fs__WEBPACK_IMPORTED_MODULE_2__.rmSync(CIMON_SCRIPT_PATH);
-    fs__WEBPACK_IMPORTED_MODULE_2__.rmSync(CIMON_EXECUTABLE_PATH);
 
     if (retval !== 0) {
         throw new Error(`Failed stopping Cimon process: ${retval}`);

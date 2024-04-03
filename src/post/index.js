@@ -78,8 +78,6 @@ async function run(config) {
             silent: false,
         });
     }
-    fs.rmSync(CIMON_SCRIPT_PATH);
-    fs.rmSync(CIMON_EXECUTABLE_PATH);
 
     if (retval !== 0) {
         throw new Error(`Failed stopping Cimon process: ${retval}`);
