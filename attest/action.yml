@@ -30,6 +30,14 @@ inputs:
     description: Input path to a private ECDSA/RSA/ED25519 key used to sign provenance statement
     required: false
     default: ''
+  allow-keyless:
+    description: Allow keyless signature if no signing key is provided
+    required: false
+    default: 'false'
+  allow-tlog-upload:
+    description: Allow the creation of a Rekor transparency log (TLog) entry.
+    required: false
+    default: 'true'
   provenance-output:
     description: Provenance output path. Can be absolute path, or relative path to the default working directory
     required: false

@@ -10861,6 +10861,8 @@ function getActionConfig() {
             subjects: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('subjects'),
             imageRef: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('image-ref'),
             signKey: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('sign-key'),
+            allowKeyless: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('allow-keyless'),
+            allowTLogUpload: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('allow-tlog-upload'),
             provenanceOutput: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('provenance-output'),
             signedProvenanceOutput: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('signed-provenance-output'),
             githubContext: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('github-context'),
@@ -10916,6 +10918,8 @@ async function run(config) {
         CIMON_SUBJECTS: config.attest.subjects,
         CIMON_ATTEST_IMAGE_REF: config.attest.imageRef,
         CIMON_SIGN_KEY: config.attest.signKey,
+        CIMON_ALLOW_KEYLESS: config.attest.allowKeyless,
+        CIMON_ALLOW_TLOG: config.attest.allowTLogUpload,
         CIMON_PROVENANCE_OUTPUT: config.attest.provenanceOutput,
         CIMON_SIGNED_PROVENANCE_OUTPUT: config.attest.signedProvenanceOutput,
         CIMON_LOG_LEVEL: config.cimon.logLevel,
@@ -10942,7 +10946,7 @@ async function run(config) {
                 path__WEBPACK_IMPORTED_MODULE_4__.dirname(config.attest.provenanceOutput),
                 { continueOnError: true }
             );
-        if (config.attest.signKey != '') {
+        if (config.attest.signKey != '' || config.attest.allowKeyless) {
             _actions_artifact__WEBPACK_IMPORTED_MODULE_2__.create()
                 .uploadArtifact(
                     'signed-provenance',
