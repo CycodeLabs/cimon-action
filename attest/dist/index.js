@@ -10861,6 +10861,8 @@ function getActionConfig() {
             subjects: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('subjects'),
             imageRef: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('image-ref'),
             signKey: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('sign-key'),
+            allowKeyless: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('allow-keyless'),
+            allowTLogUpload: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('allow-tlog-upload'),
             provenanceOutput: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('provenance-output'),
             signedProvenanceOutput: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('signed-provenance-output'),
         },
@@ -10910,12 +10912,33 @@ async function run(config) {
         releasePath = CIMON_EXECUTABLE_PATH;
     }
 
+<<<<<<< HEAD
     if (config.attest.imageRef !== '') {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(
             'image-ref parameter is deprecated and will be removed in future versions. Please use subjects parameter instead.'
         );
         config.attest.subjects = config.attest.imageRef;
     }
+=======
+    const env = {
+        ...process.env,
+        CIMON_SUBJECTS: config.attest.subjects,
+        CIMON_ATTEST_IMAGE_REF: config.attest.imageRef,
+        CIMON_SIGN_KEY: config.attest.signKey,
+        CIMON_ALLOW_KEYLESS: config.attest.allowKeyless,
+        CIMON_ALLOW_TLOG: config.attest.allowTLogUpload,
+        CIMON_PROVENANCE_OUTPUT: config.attest.provenanceOutput,
+        CIMON_SIGNED_PROVENANCE_OUTPUT: config.attest.signedProvenanceOutput,
+        CIMON_LOG_LEVEL: config.cimon.logLevel,
+        CIMON_CLIENT_ID: config.cimon.clientId,
+        CIMON_SECRET: config.cimon.secret,
+        CIMON_URL: config.cimon.url,
+        CIMON_REPORT_JOB_SUMMARY: config.report.reportJobSummary,
+        CIMON_REPORT_ARTIFACT: 'false',
+        GITHUB_CONTEXT: config.attest.githubContext,
+        GITHUB_TOKEN: config.github.token,
+    };
+>>>>>>> f8904f6 (feat: added keyless signing support.)
 
     // Prepare CLI arguments conditionally
     const args = ['attest', 'generate-and-sign'];
@@ -10949,7 +10972,11 @@ async function run(config) {
                 path__WEBPACK_IMPORTED_MODULE_4__.dirname(config.attest.provenanceOutput),
                 { continueOnError: true }
             );
+<<<<<<< HEAD
         if (config.attest.signKey !== '') {
+=======
+        if (config.attest.signKey != '' || config.attest.allowKeyless) {
+>>>>>>> f8904f6 (feat: added keyless signing support.)
             _actions_artifact__WEBPACK_IMPORTED_MODULE_2__.create()
                 .uploadArtifact(
                     'signed-provenance',
