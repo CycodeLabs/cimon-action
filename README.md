@@ -2,6 +2,14 @@
 
 ![](./pics/cimon-cover.png)
 
+<a href="https://cycode.com/cygives/" alt="Cimon is part of Cygives, the community hub for free & open developer security tools."/>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/images/Cygives-darkmode.svg">
+    <source media="(prefers-color-scheme: light)" srcset="./assets/images/Cygives-lightmode.svg">
+    <img alt="Cygives Banner" src="./assets/images/Cygives-lightmode.svg">
+  </picture>
+</a>
+
 [Cimon](https://cimon.build) (pronounced "Simon") is a runtime security solution that detects and stops software supply-chain attacks on your pipeline, including those targeting SolarWinds and CodeCov, through easy onboarding and a developer-friendly experience.
 
 By utilizing the revolutionary eBPF technology, Cimon monitors and mitigates attacks within the kernel, denying access to users' assets as soon as they arise.
