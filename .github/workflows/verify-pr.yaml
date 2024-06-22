@@ -52,7 +52,30 @@ jobs:
       - name: Run Cimon
         uses: ./attest
         with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
           subjects: NDgyY2U4YzhmN2U4NjdkYTNhM2MwNWE5YWVlNjM3NzAzZTE3NDcwZWQxY2Y4ODJhOWU1YjQwNWU4ZjgyNjE5ZCAgYXJ0aWZhY3QxCjg5Y2ZjNjk1NGU4OGIyZjkyYTdjMjg3OWQ5ZWIwODVjNDJmM2M3MDY1ZDAxMmE1MDY2ZjQ1MGRiZTU5YjJjMDAgIGFydGlmYWN0Mgo=
+          sign-key: private-key.pem
+          report-job-summary: true
+          report-artifact: true
+          fail-on-error: true
+
+  verify-provenance-image-ref:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
+
+      - name: Create Private Key
+        run: |
+          openssl genrsa -out private-key.pem 3072
+
+      - name: Run Cimon
+        uses: ./attest
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
+          subjects: 'cycodelabs/cimon@sha256:ad4ab84178621f359a5ec1ba9eff8ba46626d8d1999416646b6aaa96bfcbf802'
           sign-key: private-key.pem
           report-job-summary: true
           report-artifact: true
@@ -67,6 +90,8 @@ jobs:
       - name: Run Cimon Agent
         uses: ./
         with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
           report-process-tree: true
           fail-on-error: true
 
@@ -77,6 +102,8 @@ jobs:
       - name: Run Cimon Attest
         uses: ./attest
         with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
           subjects: artifact.txt
           report-job-summary: true
           fail-on-error: true
