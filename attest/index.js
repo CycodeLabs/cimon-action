@@ -85,10 +85,16 @@ async function run(config) {
         releasePath = CIMON_EXECUTABLE_PATH;
     }
 
+    if (config.attest.imageRef !== '') {
+        core.warning(
+            'image-ref parameter is deprecated and will be removed in future versions. Please use subjects parameter instead.'
+        );
+        config.attest.subjects = config.attest.imageRef;
+    }
+
     const env = {
         ...process.env,
         CIMON_SUBJECTS: config.attest.subjects,
-        CIMON_ATTEST_IMAGE_REF: config.attest.imageRef,
         CIMON_SIGN_KEY: config.attest.signKey,
         CIMON_PROVENANCE_OUTPUT: config.attest.provenanceOutput,
         CIMON_SIGNED_PROVENANCE_OUTPUT: config.attest.signedProvenanceOutput,
