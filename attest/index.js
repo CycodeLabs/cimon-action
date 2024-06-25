@@ -35,6 +35,8 @@ function getActionConfig() {
             subjects: core.getInput('subjects'),
             imageRef: core.getInput('image-ref'),
             signKey: core.getInput('sign-key'),
+            allowKeyless: core.getBooleanInput('allow-keyless'),
+            allowTLogUpload: core.getBooleanInput('allow-tlog-upload'),
             provenanceOutput: core.getInput('provenance-output'),
             signedProvenanceOutput: core.getInput('signed-provenance-output'),
             githubContext: core.getInput('github-context'),
@@ -96,6 +98,8 @@ async function run(config) {
         ...process.env,
         CIMON_SUBJECTS: config.attest.subjects,
         CIMON_SIGN_KEY: config.attest.signKey,
+        CIMON_ALLOW_KEYLESS: config.attest.allowKeyless,
+        CIMON_ALLOW_TLOG: config.attest.allowTLogUpload,
         CIMON_PROVENANCE_OUTPUT: config.attest.provenanceOutput,
         CIMON_SIGNED_PROVENANCE_OUTPUT: config.attest.signedProvenanceOutput,
         CIMON_LOG_LEVEL: config.cimon.logLevel,
@@ -123,7 +127,7 @@ async function run(config) {
                 path.dirname(config.attest.provenanceOutput),
                 { continueOnError: true }
             );
-        if (config.attest.signKey != '') {
+        if (config.attest.signKey != '' || config.attest.allowKeyless) {
             artifact
                 .create()
                 .uploadArtifact(
