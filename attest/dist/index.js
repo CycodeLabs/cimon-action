@@ -10863,7 +10863,6 @@ function getActionConfig() {
             signKey: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('sign-key'),
             provenanceOutput: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('provenance-output'),
             signedProvenanceOutput: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('signed-provenance-output'),
-            githubContext: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('github-context'),
         },
         report: {
             reportJobSummary: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-job-summary'),
@@ -10875,7 +10874,7 @@ function getActionConfig() {
 async function run(config) {
     let releasePath;
 
-    if (config.cimon.releasePath != '') {
+    if (config.cimon.releasePath !== '') {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(
             `Running Cimon from release path: ${config.cimon.releasePath}`
         );
@@ -10918,27 +10917,29 @@ async function run(config) {
         config.attest.subjects = config.attest.imageRef;
     }
 
-    const env = {
-        ...process.env,
-        CIMON_SUBJECTS: config.attest.subjects,
-        CIMON_SIGN_KEY: config.attest.signKey,
-        CIMON_PROVENANCE_OUTPUT: config.attest.provenanceOutput,
-        CIMON_SIGNED_PROVENANCE_OUTPUT: config.attest.signedProvenanceOutput,
-        CIMON_LOG_LEVEL: config.cimon.logLevel,
-        CIMON_CLIENT_ID: config.cimon.clientId,
-        CIMON_SECRET: config.cimon.secret,
-        CIMON_URL: config.cimon.url,
-        CIMON_REPORT_JOB_SUMMARY: config.report.reportJobSummary,
-        CIMON_REPORT_ARTIFACT: 'false',
-        GITHUB_CONTEXT: config.attest.githubContext,
-        GITHUB_TOKEN: config.github.token,
-    };
+    // Prepare CLI arguments conditionally
+    const args = ['attest', 'generate-and-sign'];
+    if (config.attest.subjects !== '')
+        args.push('--subjects', config.attest.subjects);
+    if (config.attest.provenanceOutput !== '')
+        args.push('--output-prov', config.attest.provenanceOutput);
+    if (config.attest.signedProvenanceOutput !== '')
+        args.push('--output-signed-prov', config.attest.signedProvenanceOutput);
+    if (config.attest.signKey !== '') args.push('--key', config.attest.signKey);
+    if (config.cimon.clientId !== '')
+        args.push('--client-id', config.cimon.clientId);
+    if (config.cimon.secret !== '') args.push('--secret', config.cimon.secret);
+    if (config.cimon.url !== '') args.push('--url', config.cimon.url);
+    if (config.cimon.logLevel !== '')
+        args.push('--log-level', config.cimon.logLevel);
+    if (config.report.reportJobSummary) args.push('--report-job-summary');
 
-    const options = {
-        env,
-    };
-
-    await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(releasePath, ['attest'], options);
+    await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(releasePath, args, {
+        env: {
+            ...process.env,
+            GITHUB_TOKEN: config.github.token,
+        },
+    });
 
     if (config.report.reportArtifact) {
         _actions_artifact__WEBPACK_IMPORTED_MODULE_2__.create()
@@ -10948,7 +10949,7 @@ async function run(config) {
                 path__WEBPACK_IMPORTED_MODULE_4__.dirname(config.attest.provenanceOutput),
                 { continueOnError: true }
             );
-        if (config.attest.signKey != '') {
+        if (config.attest.signKey !== '') {
             _actions_artifact__WEBPACK_IMPORTED_MODULE_2__.create()
                 .uploadArtifact(
                     'signed-provenance',
