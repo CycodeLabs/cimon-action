@@ -37,6 +37,7 @@ function getActionConfig() {
             signKey: core.getInput('sign-key'),
             allowKeyless: core.getBooleanInput('allow-keyless'),
             allowTLogUpload: core.getBooleanInput('allow-tlog-upload'),
+            allowTimestampUpload: core.getBooleanInput('allow-timestamp-upload'),
             provenanceOutput: core.getInput('provenance-output'),
             signedProvenanceOutput: core.getInput('signed-provenance-output'),
         },
