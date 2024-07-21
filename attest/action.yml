@@ -30,15 +30,15 @@ inputs:
     description: Input path to a private ECDSA/RSA/ED25519 key used to sign provenance statement
     required: false
     default: ''
-  allow-keyless:
+  keyless:
     description: Allow keyless signature if no signing key is provided
     required: false
     default: 'false'
-  allow-tlog-upload:
+  allow-tlog:
     description: Allow the creation of a Rekor transparency log (TLog) entry.
     required: false
     default: 'true'
-  allow-timestamp-upload:
+  allow-timestamp:
     description: Allow timestamping of the artifact signature against a timestamping authority.
     required: false
     default: 'false'
