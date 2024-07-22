@@ -30,6 +30,29 @@ inputs:
     description: Input path to a private ECDSA/RSA/ED25519 key used to sign provenance statement
     required: false
     default: ''
+  keyless:
+    description: Allow keyless signature if no signing key is provided
+    required: false
+    default: 'false'
+  allow-tlog:
+    description: Allow the creation of a Rekor transparency log (TLog) entry.
+    required: false
+    default: 'true'
+  allow-timestamp:
+    description: Allow timestamping of the artifact signature against a timestamping authority.
+    required: false
+    default: 'false'
+  fulcio-server-url:
+    description: Fulcio server URL
+    required: false
+    default: 'https://fulcio.sigstore.dev'
+  rekor-server-url:
+    description: Rekor server URL
+    required: false
+    default: 'https://rekor.sigstore.dev'
+  timestamp-server-url:
+    description: Timestamp server URL
+    required: false
   provenance-output:
     description: Provenance output path. Can be absolute path, or relative path to the default working directory
     required: false

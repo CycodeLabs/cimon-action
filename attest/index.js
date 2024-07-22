@@ -35,6 +35,12 @@ function getActionConfig() {
             subjects: core.getInput('subjects'),
             imageRef: core.getInput('image-ref'),
             signKey: core.getInput('sign-key'),
+            keyless: core.getBooleanInput('keyless'),
+            allowTLog: core.getBooleanInput('allow-tlog'),
+            allowTimestamp: core.getBooleanInput('allow-timestamp'),
+            fulcioServerUrl: core.getInput('fulcio-server-url'),
+            rekorServerUrl: core.getInput('rekor-server-url'),
+            timestampServerUrl: core.getInput('timestamp-server-url'),
             provenanceOutput: core.getInput('provenance-output'),
             signedProvenanceOutput: core.getInput('signed-provenance-output'),
         },
@@ -107,6 +113,24 @@ async function run(config) {
     if (config.cimon.logLevel !== '')
         args.push('--log-level', config.cimon.logLevel);
     if (config.report.reportJobSummary) args.push('--report-job-summary');
+    if (config.attest.keyless) {
+        args.push('--keyless');
+        
+        args.push(`--allow-tlog=${config.attest.allowTLog}`);
+        args.push(`--allow-timestamp=${config.attest.allowTimestamp}`);
+
+        if (config.attest.fulcioServerUrl !== '') {
+            args.push(`--fulcio-server-url=${config.attest.fulcioServerUrl}`);
+        }
+        
+        if (config.attest.rekorServerUrl !== '') {
+            args.push(`--rekor-server-url=${config.attest.rekorServerUrl}`);
+        }
+
+        if (config.attest.timestampServerUrl !== '') {
+            args.push(`--timestamp-server-url=${config.attest.timestampServerUrl}`);
+        }
+    }
 
     await exec.exec(releasePath, args, {
         env: {
