@@ -39,6 +39,38 @@ jobs:
           curl -I https://cycode.com
           wget --quiet --timeout 1 https://registry.npmjs.org || true
 
+  verify-in-container:
+    runs-on: ubuntu-22.04
+    container:
+      image: alpine:3.18
+      options: --privileged
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
+
+      - name: Install dependencies
+        run: |
+          apk update
+          apk add curl wget
+
+      - name: Run Cimon
+        uses: ./
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
+          prevent: true
+          allowed-hosts: >
+            cycode.com
+            registry.npmjs.org
+          report-process-tree: true
+          fail-on-error: true
+
+      - name: Test
+        run: |
+          curl -I https://api.github.com
+          curl -I https://cycode.com
+          wget --quiet --timeout 1 https://registry.npmjs.org || true
+
   verify-provenance:
     runs-on: ubuntu-22.04
     steps:
