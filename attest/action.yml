@@ -34,11 +34,11 @@ inputs:
     description: Allow keyless signature if no signing key is provided
     required: false
     default: 'false'
-  allow-tlog:
+  tlog-upload:
     description: Allow the creation of a Rekor transparency log (TLog) entry.
     required: false
     default: 'true'
-  allow-timestamp:
+  include-timestamp:
     description: Allow timestamping of the artifact signature against a timestamping authority.
     required: false
     default: 'false'
@@ -53,6 +53,10 @@ inputs:
   timestamp-server-url:
     description: Timestamp server URL
     required: false
+  allow-submit-data-to-public-sigstore:
+    description: Agree to submit data to an immutable public transparency log (Needed for public Sigstore)
+    required: false
+    default: 'false'
   provenance-output:
     description: Provenance output path. Can be absolute path, or relative path to the default working directory
     required: false
