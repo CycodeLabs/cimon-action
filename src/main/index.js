@@ -109,6 +109,7 @@ async function run(config) {
         CIMON_FEATURE_GATES: config.cimon.featureGates,
         GITHUB_TOKEN: config.github.token,
         CIMON_LOG_LEVEL: config.cimon.logLevel,
+        CIMON_ENABLE_GITHUB_NETWORK_POLICY: true,
     };
 
     var retval;
