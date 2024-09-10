@@ -10862,11 +10862,14 @@ function getActionConfig() {
             imageRef: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('image-ref'),
             signKey: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('sign-key'),
             keyless: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('keyless'),
-            allowTLog: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('allow-tlog'),
-            allowTimestamp: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('allow-timestamp'),
+            tlogUpload: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('tlog-upload'),
+            includeTimestamp: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('include-timestamp'),
             fulcioServerUrl: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('fulcio-server-url'),
             rekorServerUrl: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('rekor-server-url'),
             timestampServerUrl: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('timestamp-server-url'),
+            allowSubmitDataToPublicSigstore: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput(
+                'allow-submit-data-to-public-sigstore'
+            ),
             provenanceOutput: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('provenance-output'),
             signedProvenanceOutput: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('signed-provenance-output'),
         },
@@ -10941,20 +10944,23 @@ async function run(config) {
     if (config.report.reportJobSummary) args.push('--report-job-summary');
     if (config.attest.keyless) {
         args.push('--keyless');
-        
-        args.push(`--allow-tlog=${config.attest.allowTLog}`);
-        args.push(`--allow-timestamp=${config.attest.allowTimestamp}`);
+
+        args.push(`--tlog-upload=${config.attest.tlogUpload}`);
+        args.push(`--include-timestamp=${config.attest.includeTimestamp}`);
+        args.push(`--yes=${config.attest.allowSubmitDataToPublicSigstore}`);
 
         if (config.attest.fulcioServerUrl !== '') {
             args.push(`--fulcio-server-url=${config.attest.fulcioServerUrl}`);
         }
-        
+
         if (config.attest.rekorServerUrl !== '') {
             args.push(`--rekor-server-url=${config.attest.rekorServerUrl}`);
         }
 
         if (config.attest.timestampServerUrl !== '') {
-            args.push(`--timestamp-server-url=${config.attest.timestampServerUrl}`);
+            args.push(
+                `--timestamp-server-url=${config.attest.timestampServerUrl}`
+            );
         }
     }
 
