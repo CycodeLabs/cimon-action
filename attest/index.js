@@ -1,6 +1,6 @@
 import core from '@actions/core';
 import exec from '@actions/exec';
-import artifact from '@actions/artifact';
+import { DefaultArtifactClient } from '@actions/artifact';
 import * as http from '@actions/http-client';
 import path from 'path';
 import fs from 'fs';
@@ -146,23 +146,23 @@ async function run(config) {
     });
 
     if (config.report.reportArtifact) {
-        artifact
-            .create()
-            .uploadArtifact(
-                'provenance',
-                [config.attest.provenanceOutput],
-                path.dirname(config.attest.provenanceOutput),
+        const client = new DefaultArtifactClient();
+        const jobId = process.env.GITHUB_JOB;
+        const randomSuffix = Math.floor(Math.random() * 1000);
+
+        client.uploadArtifact(
+            `provenance-${jobId}-${randomSuffix}`,
+            [config.attest.provenanceOutput],
+            path.dirname(config.attest.provenanceOutput),
+            { continueOnError: true }
+        );
+        if (config.attest.signKey !== '') {
+            client.uploadArtifact(
+                `signed-provenance-${jobId}-${randomSuffix}`,
+                [config.attest.signedProvenanceOutput],
+                path.dirname(config.attest.signedProvenanceOutput),
                 { continueOnError: true }
             );
-        if (config.attest.signKey !== '') {
-            artifact
-                .create()
-                .uploadArtifact(
-                    'signed-provenance',
-                    [config.attest.signedProvenanceOutput],
-                    path.dirname(config.attest.signedProvenanceOutput),
-                    { continueOnError: true }
-                );
         }
     }
 
