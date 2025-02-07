@@ -13,8 +13,8 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "@actions/artifact": "^1.1.1",
-    "@actions/core": "^1.10.0",
+    "@actions/artifact": "^2.2.1",
+    "@actions/core": "^1.11.1",
     "@actions/exec": "^1.1.1",
     "@vercel/ncc": "^0.34.0"
   }
