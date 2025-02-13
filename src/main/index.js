@@ -28,6 +28,7 @@ function getActionConfig() {
             preventionMode: core.getBooleanInput('prevent'),
             allowedIPs: core.getInput('allowed-ips'),
             allowedHosts: core.getInput('allowed-hosts'),
+            fileIntegrity: core.getBooleanInput('file-integrity'),
             ignoredIPNets: core.getInput('ignored-ip-nets'),
             applyFsEvents: core.getBooleanInput('apply-fs-events'),
             clientId: core.getInput('client-id'),
@@ -98,6 +99,7 @@ async function run(config) {
         CIMON_PREVENT: config.cimon.preventionMode,
         CIMON_ALLOWED_IPS: config.cimon.allowedIPs,
         CIMON_ALLOWED_HOSTS: config.cimon.allowedHosts,
+        CIMON_FILE_INTEGRITY: config.cimon.fileIntegrity,
         CIMON_IGNORED_IP_NETS: config.cimon.ignoredIPNets,
         CIMON_REPORT_GITHUB_JOB_SUMMARY: config.github.jobSummary,
         CIMON_REPORT_PROCESS_TREE: config.report.processTree,
@@ -111,6 +113,11 @@ async function run(config) {
         CIMON_LOG_LEVEL: config.cimon.logLevel,
         CIMON_ENABLE_GITHUB_NETWORK_POLICY: true,
     };
+
+    if (config.cimon.fileIntegrity) {
+        // Feature flags that required for the file integrity module.
+        env.CIMON_FEATURE_GATES = 'FSSensor=1,DataAnalysis=1';
+    }
 
     var retval;
     const sudo = await sudoExists();
