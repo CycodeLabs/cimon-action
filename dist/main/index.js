@@ -3550,6 +3550,7 @@ function getActionConfig() {
             preventionMode: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('prevent'),
             allowedIPs: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('allowed-ips'),
             allowedHosts: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('allowed-hosts'),
+            fileIntegrity: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('file-integrity'),
             ignoredIPNets: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('ignored-ip-nets'),
             applyFsEvents: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('apply-fs-events'),
             clientId: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('client-id'),
@@ -3620,6 +3621,7 @@ async function run(config) {
         CIMON_PREVENT: config.cimon.preventionMode,
         CIMON_ALLOWED_IPS: config.cimon.allowedIPs,
         CIMON_ALLOWED_HOSTS: config.cimon.allowedHosts,
+        CIMON_FILE_INTEGRITY: config.cimon.fileIntegrity,
         CIMON_IGNORED_IP_NETS: config.cimon.ignoredIPNets,
         CIMON_REPORT_GITHUB_JOB_SUMMARY: config.github.jobSummary,
         CIMON_REPORT_PROCESS_TREE: config.report.processTree,
@@ -3633,6 +3635,11 @@ async function run(config) {
         CIMON_LOG_LEVEL: config.cimon.logLevel,
         CIMON_ENABLE_GITHUB_NETWORK_POLICY: true,
     };
+
+    if (config.cimon.fileIntegrity) {
+        // Feature flags that required for the file integrity module.
+        env.CIMON_FEATURE_GATES = 'FSSensor=1,DataAnalysis=1';
+    }
 
     var retval;
     const sudo = await sudoExists();
