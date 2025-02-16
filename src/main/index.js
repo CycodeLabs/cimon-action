@@ -22,6 +22,7 @@ function getActionConfig() {
         github: {
             token: core.getInput('github-token'),
             jobSummary: core.getBooleanInput('report-job-summary'),
+            prSummary: core.getBooleanInput('report-pr-summary'),
         },
         cimon: {
             logLevel: core.getInput('log-level'),
@@ -102,6 +103,7 @@ async function run(config) {
         CIMON_FILE_INTEGRITY: config.cimon.fileIntegrity,
         CIMON_IGNORED_IP_NETS: config.cimon.ignoredIPNets,
         CIMON_REPORT_GITHUB_JOB_SUMMARY: config.github.jobSummary,
+        CIMON_REPORT_PR_SUMMARY: config.github.prSummary,
         CIMON_REPORT_PROCESS_TREE: config.report.processTree,
         CIMON_SLACK_WEBHOOK_ENDPOINT: config.report.slackWebhookEndpoint,
         CIMON_APPLY_FS_EVENTS: config.cimon.applyFsEvents,

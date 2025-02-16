@@ -45,6 +45,10 @@ inputs:
     description: Report results through job summary output
     required: false
     default: 'true'
+  report-pr-summary:
+    description: Report results through PR comment
+    required: false
+    default: 'false'
   report-process-tree:
     description: Enable to report the process tree
     required: false
