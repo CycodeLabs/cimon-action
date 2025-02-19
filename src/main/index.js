@@ -119,6 +119,9 @@ async function run(config) {
     if (config.cimon.fileIntegrity) {
         // Feature flags that required for the file integrity module.
         env.CIMON_FEATURE_GATES = 'FSSensor=1,DataAnalysis=1';
+
+        // Remove FS performance to catch large files.
+        env.CIMON_FS_SENSOR_PERF_MODE = false;
     }
 
     var retval;
