@@ -30,6 +30,7 @@ function getActionConfig() {
             allowedIPs: core.getInput('allowed-ips'),
             allowedHosts: core.getInput('allowed-hosts'),
             fileIntegrity: core.getBooleanInput('file-integrity'),
+            memoryProtection: core.getBooleanInput('memory-protection'),
             ignoredIPNets: core.getInput('ignored-ip-nets'),
             applyFsEvents: core.getBooleanInput('apply-fs-events'),
             clientId: core.getInput('client-id'),
@@ -101,6 +102,7 @@ async function run(config) {
         CIMON_ALLOWED_IPS: config.cimon.allowedIPs,
         CIMON_ALLOWED_HOSTS: config.cimon.allowedHosts,
         CIMON_FILE_INTEGRITY: config.cimon.fileIntegrity,
+        CIMON_MEM_PROT: config.cimon.memoryProtection,
         CIMON_IGNORED_IP_NETS: config.cimon.ignoredIPNets,
         CIMON_REPORT_GITHUB_JOB_SUMMARY: config.github.jobSummary,
         CIMON_REPORT_PR_SUMMARY: config.github.prSummary,
@@ -122,6 +124,11 @@ async function run(config) {
 
         // Remove FS performance to catch large files.
         env.CIMON_FS_SENSOR_PERF_MODE = false;
+    }
+
+    if (config.cimon.memoryProtection) {
+        // Feature flags that required for the memory protection module.
+        env.CIMON_FEATURE_GATES = 'FSSensor=1';
     }
 
     var retval;
