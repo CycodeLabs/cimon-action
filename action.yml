@@ -28,6 +28,10 @@ inputs:
     description: Enable file integrity module in prevent mode
     required: false
     default: 'false'
+  memory-protection:
+    description: Enable memory protection module in prevent mode
+    required: false
+    default: 'false'
   ignored-ip-nets:
     description: |
       A comma or white space separated list of ignored IP networks in CIDR
