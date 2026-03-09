@@ -3678,6 +3678,9 @@ async function run(config) {
     if (retval !== 0) {
         throw new Error(`Failed starting Cimon process: ${retval}`);
     }
+
+    // Save the release path so the post step uses the same binary for stop.
+    _actions_core__WEBPACK_IMPORTED_MODULE_0__.saveState('release-path', releasePath);
 }
 
 try {

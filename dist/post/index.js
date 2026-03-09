@@ -3558,22 +3558,87 @@ async function sudoExists() {
     }
 }
 
-async function run(config) {
-    if (!fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(CIMON_SCRIPT_PATH)) {
-        await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
+/**
+ * Determines the Cimon executable path.
+ * Prefers the release-path saved by the main step so the same binary
+ * is used for both start and stop.
+ */
+function getCimonPath() {
+    const savedPath = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getState('release-path');
+    if (savedPath && fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(savedPath)) {
+        return savedPath;
+    }
+    return CIMON_EXECUTABLE_PATH;
+}
+
+/**
+ * Parses SBOM file entries from cimon agent stop output.
+ * Returns an array of {cyclonedx, spdx} objects.
+ */
+function parseSBOMEntries(output) {
+    const entries = [];
+    for (const line of output.split('\n')) {
+        if (!line.includes('"SBOM files written"')) continue;
+        try {
+            const parsed = JSON.parse(line);
+            if (parsed.cyclonedx || parsed.spdx) {
+                entries.push({
+                    cyclonedx: parsed.cyclonedx || '',
+                    spdx: parsed.spdx || '',
+                });
+            }
+        } catch {
+            // Not valid JSON, skip.
+        }
+    }
+    return entries;
+}
+
+/**
+ * Builds a GitHub Actions job summary with SBOM results.
+ */
+async function writeSBOMSummary(sbomEntries) {
+    if (sbomEntries.length === 0) return;
+
+    const rows = [['Format', 'Path']];
+    for (const entry of sbomEntries) {
+        if (entry.cyclonedx) {
+            rows.push(['CycloneDX', `\`${entry.cyclonedx}\``]);
+        }
+        if (entry.spdx) {
+            rows.push(['SPDX', `\`${entry.spdx}\``]);
+        }
     }
 
-    if (!fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(CIMON_EXECUTABLE_DIR)) {
-        let params = [CIMON_SCRIPT_PATH, '-b', CIMON_EXECUTABLE_DIR];
-        if (
-            config.cimon.logLevel == 'debug' ||
-            config.cimon.logLevel == 'trace'
-        ) {
-            params.push('-d');
+    await _actions_core__WEBPACK_IMPORTED_MODULE_0__.summary.addHeading('Cimon SBOM Report', 2)
+        .addRaw(
+            `**${sbomEntries.length}** SBOM${sbomEntries.length > 1 ? 's' : ''} generated during build.\n\n`
+        )
+        .addTable(rows)
+        .write();
+}
+
+async function run(config) {
+    const cimonPath = getCimonPath();
+
+    // Ensure the Cimon binary is available (fallback: download from S3).
+    if (!fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(cimonPath)) {
+        if (!fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(CIMON_SCRIPT_PATH)) {
+            await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
         }
-        let retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sh', params);
-        if (retval !== 0) {
-            throw new Error(`Failed installing Cimon: ${retval}`);
+
+        if (!fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(CIMON_EXECUTABLE_DIR)) {
+            let params = [CIMON_SCRIPT_PATH, '-b', CIMON_EXECUTABLE_DIR];
+            if (
+                config.cimon.logLevel == 'debug' ||
+                config.cimon.logLevel == 'trace'
+            ) {
+                params.push('-d');
+            }
+            let retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sh', params);
+            if (retval !== 0) {
+                throw new Error(`Failed installing Cimon: ${retval}`);
+            }
         }
     }
 
@@ -3582,23 +3647,42 @@ async function run(config) {
         CIMON_LOG_LEVEL: config.cimon.logLevel,
     };
 
+    // Capture stdout/stderr to parse SBOM entries from the stop output.
+    let stopOutput = '';
+    const options = {
+        env,
+        silent: false,
+        listeners: {
+            stdout: (data) => {
+                stopOutput += data.toString();
+            },
+            stderr: (data) => {
+                stopOutput += data.toString();
+            },
+        },
+        ignoreReturnCode: true,
+    };
+
     var retval;
     const sudo = await sudoExists();
 
     if (sudo) {
         retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(
             'sudo',
-            ['-E', CIMON_EXECUTABLE_PATH, 'agent', 'stop'],
-            {
-                env,
-                silent: false,
-            }
+            ['-E', cimonPath, 'agent', 'stop'],
+            options
         );
     } else {
-        retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(CIMON_EXECUTABLE_PATH, ['agent', 'stop'], {
-            env,
-            silent: false,
-        });
+        retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(cimonPath, ['agent', 'stop'], options);
+    }
+
+    // Parse and display SBOM summary regardless of stop exit code.
+    const sbomEntries = parseSBOMEntries(stopOutput);
+    if (sbomEntries.length > 0) {
+        const reportJobSummary = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-job-summary');
+        if (reportJobSummary) {
+            await writeSBOMSummary(sbomEntries);
+        }
     }
 
     if (retval !== 0) {
