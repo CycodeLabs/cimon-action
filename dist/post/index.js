@@ -3520,6 +3520,8 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony import */ var _actions_exec__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(514);
 /* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(147);
 /* harmony import */ var _actions_http_client__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(255);
+/* harmony import */ var _sbom_summary_js__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(21);
+
 
 
 
@@ -3562,6 +3564,11 @@ async function sudoExists() {
  * Determines the Cimon executable path.
  * Prefers the release-path saved by the main step so the same binary
  * is used for both start and stop.
+ *
+ * Backward compatibility: when the main step was run by an older version
+ * of cimon-action that did not call core.saveState('release-path', ...),
+ * core.getState() returns '' and we fall back to the default S3-downloaded
+ * binary at /tmp/cimon/cimon — exactly the same behavior as before.
  */
 function getCimonPath() {
     const savedPath = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getState('release-path');
@@ -3569,53 +3576,6 @@ function getCimonPath() {
         return savedPath;
     }
     return CIMON_EXECUTABLE_PATH;
-}
-
-/**
- * Parses SBOM file entries from cimon agent stop output.
- * Returns an array of {cyclonedx, spdx} objects.
- */
-function parseSBOMEntries(output) {
-    const entries = [];
-    for (const line of output.split('\n')) {
-        if (!line.includes('"SBOM files written"')) continue;
-        try {
-            const parsed = JSON.parse(line);
-            if (parsed.cyclonedx || parsed.spdx) {
-                entries.push({
-                    cyclonedx: parsed.cyclonedx || '',
-                    spdx: parsed.spdx || '',
-                });
-            }
-        } catch {
-            // Not valid JSON, skip.
-        }
-    }
-    return entries;
-}
-
-/**
- * Builds a GitHub Actions job summary with SBOM results.
- */
-async function writeSBOMSummary(sbomEntries) {
-    if (sbomEntries.length === 0) return;
-
-    const rows = [['Format', 'Path']];
-    for (const entry of sbomEntries) {
-        if (entry.cyclonedx) {
-            rows.push(['CycloneDX', `\`${entry.cyclonedx}\``]);
-        }
-        if (entry.spdx) {
-            rows.push(['SPDX', `\`${entry.spdx}\``]);
-        }
-    }
-
-    await _actions_core__WEBPACK_IMPORTED_MODULE_0__.summary.addHeading('Cimon SBOM Report', 2)
-        .addRaw(
-            `**${sbomEntries.length}** SBOM${sbomEntries.length > 1 ? 's' : ''} generated during build.\n\n`
-        )
-        .addTable(rows)
-        .write();
 }
 
 async function run(config) {
@@ -3677,11 +3637,11 @@ async function run(config) {
     }
 
     // Parse and display SBOM summary regardless of stop exit code.
-    const sbomEntries = parseSBOMEntries(stopOutput);
+    const sbomEntries = (0,_sbom_summary_js__WEBPACK_IMPORTED_MODULE_4__/* .parseSBOMEntries */ .w)(stopOutput);
     if (sbomEntries.length > 0) {
         const reportJobSummary = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-job-summary');
         if (reportJobSummary) {
-            await writeSBOMSummary(sbomEntries);
+            await (0,_sbom_summary_js__WEBPACK_IMPORTED_MODULE_4__/* .writeSBOMSummary */ .k)(_actions_core__WEBPACK_IMPORTED_MODULE_0__, sbomEntries);
         }
     }
 
@@ -3710,6 +3670,77 @@ try {
 
 __webpack_handle_async_dependencies__();
 }, 1);
+
+/***/ }),
+
+/***/ 21:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
+
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   "w": () => (/* binding */ parseSBOMEntries),
+/* harmony export */   "k": () => (/* binding */ writeSBOMSummary)
+/* harmony export */ });
+/**
+ * Pure helpers for parsing and displaying SBOM results in the
+ * GitHub Actions job summary.  Extracted so they can be unit-tested
+ * independently of the @actions/* runtime.
+ */
+
+/**
+ * Parses SBOM file entries from cimon agent stop output.
+ * Each JSON log line that contains `"SBOM files written"` is expected
+ * to carry `cyclonedx` and/or `spdx` path fields.
+ *
+ * @param {string} output - Combined stdout+stderr from `cimon agent stop`.
+ * @returns {Array<{cyclonedx: string, spdx: string}>}
+ */
+function parseSBOMEntries(output) {
+    const entries = [];
+    for (const line of output.split('\n')) {
+        if (!line.includes('"SBOM files written"')) continue;
+        try {
+            const parsed = JSON.parse(line);
+            if (parsed.cyclonedx || parsed.spdx) {
+                entries.push({
+                    cyclonedx: parsed.cyclonedx || '',
+                    spdx: parsed.spdx || '',
+                });
+            }
+        } catch {
+            // Not valid JSON, skip.
+        }
+    }
+    return entries;
+}
+
+/**
+ * Builds a GitHub Actions job summary table from SBOM entries.
+ *
+ * @param {import('@actions/core')} core - The @actions/core module.
+ * @param {Array<{cyclonedx: string, spdx: string}>} sbomEntries
+ */
+async function writeSBOMSummary(core, sbomEntries) {
+    if (sbomEntries.length === 0) return;
+
+    const rows = [['Format', 'Path']];
+    for (const entry of sbomEntries) {
+        if (entry.cyclonedx) {
+            rows.push(['CycloneDX', `\`${entry.cyclonedx}\``]);
+        }
+        if (entry.spdx) {
+            rows.push(['SPDX', `\`${entry.spdx}\``]);
+        }
+    }
+
+    await core.summary
+        .addHeading('Cimon SBOM Report', 2)
+        .addRaw(
+            `**${sbomEntries.length}** SBOM${sbomEntries.length > 1 ? 's' : ''} generated during build.\n\n`
+        )
+        .addTable(rows)
+        .write();
+}
+
 
 /***/ })
 
@@ -3818,6 +3849,23 @@ __webpack_handle_async_dependencies__();
 /******/ 		}).then(outerResolve, reject);
 /******/ 		isEvaluating = false;
 /******/ 	};
+/******/ })();
+/******/ 
+/******/ /* webpack/runtime/define property getters */
+/******/ (() => {
+/******/ 	// define getter functions for harmony exports
+/******/ 	__nccwpck_require__.d = (exports, definition) => {
+/******/ 		for(var key in definition) {
+/******/ 			if(__nccwpck_require__.o(definition, key) && !__nccwpck_require__.o(exports, key)) {
+/******/ 				Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
+/******/ 			}
+/******/ 		}
+/******/ 	};
+/******/ })();
+/******/ 
+/******/ /* webpack/runtime/hasOwnProperty shorthand */
+/******/ (() => {
+/******/ 	__nccwpck_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
 /******/ })();
 /******/ 
 /******/ /* webpack/runtime/compat */
