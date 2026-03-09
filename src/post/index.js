@@ -2,6 +2,7 @@ import core from '@actions/core';
 import exec from '@actions/exec';
 import fs from 'fs';
 import * as http from '@actions/http-client';
+import { parseSBOMEntries, writeSBOMSummary } from './sbom-summary.js';
 
 const CIMON_SCRIPT_DOWNLOAD_URL =
     'https://cimon-releases.s3.amazonaws.com/install.sh';
@@ -40,6 +41,11 @@ async function sudoExists() {
  * Determines the Cimon executable path.
  * Prefers the release-path saved by the main step so the same binary
  * is used for both start and stop.
+ *
+ * Backward compatibility: when the main step was run by an older version
+ * of cimon-action that did not call core.saveState('release-path', ...),
+ * core.getState() returns '' and we fall back to the default S3-downloaded
+ * binary at /tmp/cimon/cimon — exactly the same behavior as before.
  */
 function getCimonPath() {
     const savedPath = core.getState('release-path');
@@ -47,54 +53,6 @@ function getCimonPath() {
         return savedPath;
     }
     return CIMON_EXECUTABLE_PATH;
-}
-
-/**
- * Parses SBOM file entries from cimon agent stop output.
- * Returns an array of {cyclonedx, spdx} objects.
- */
-function parseSBOMEntries(output) {
-    const entries = [];
-    for (const line of output.split('\n')) {
-        if (!line.includes('"SBOM files written"')) continue;
-        try {
-            const parsed = JSON.parse(line);
-            if (parsed.cyclonedx || parsed.spdx) {
-                entries.push({
-                    cyclonedx: parsed.cyclonedx || '',
-                    spdx: parsed.spdx || '',
-                });
-            }
-        } catch {
-            // Not valid JSON, skip.
-        }
-    }
-    return entries;
-}
-
-/**
- * Builds a GitHub Actions job summary with SBOM results.
- */
-async function writeSBOMSummary(sbomEntries) {
-    if (sbomEntries.length === 0) return;
-
-    const rows = [['Format', 'Path']];
-    for (const entry of sbomEntries) {
-        if (entry.cyclonedx) {
-            rows.push(['CycloneDX', `\`${entry.cyclonedx}\``]);
-        }
-        if (entry.spdx) {
-            rows.push(['SPDX', `\`${entry.spdx}\``]);
-        }
-    }
-
-    await core.summary
-        .addHeading('Cimon SBOM Report', 2)
-        .addRaw(
-            `**${sbomEntries.length}** SBOM${sbomEntries.length > 1 ? 's' : ''} generated during build.\n\n`
-        )
-        .addTable(rows)
-        .write();
 }
 
 async function run(config) {
@@ -160,7 +118,7 @@ async function run(config) {
     if (sbomEntries.length > 0) {
         const reportJobSummary = core.getBooleanInput('report-job-summary');
         if (reportJobSummary) {
-            await writeSBOMSummary(sbomEntries);
+            await writeSBOMSummary(core, sbomEntries);
         }
     }
 
