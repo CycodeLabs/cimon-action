@@ -113,8 +113,8 @@ export async function writeSBOMSummary(core, sbomEntries, options = {}) {
         const entry = sbomEntries[i];
         const row = [
             `${i + 1}`,
-            entry.cyclonedx ? `\`${entry.cyclonedx}\`` : '-',
-            entry.spdx ? `\`${entry.spdx}\`` : '-',
+            entry.cyclonedx ? `<code>${entry.cyclonedx}</code>` : '-',
+            entry.spdx ? `<code>${entry.spdx}</code>` : '-',
         ];
         if (hasStats) {
             row.push(`${entry.components}`);
