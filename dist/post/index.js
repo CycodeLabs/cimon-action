@@ -3637,12 +3637,11 @@ async function run(config) {
     }
 
     // Parse and display SBOM summary regardless of stop exit code.
-    const sbomEntries = (0,_sbom_summary_js__WEBPACK_IMPORTED_MODULE_4__/* .parseSBOMEntries */ .w)(stopOutput);
-    if (sbomEntries.length > 0) {
-        const reportJobSummary = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-job-summary');
-        if (reportJobSummary) {
-            await (0,_sbom_summary_js__WEBPACK_IMPORTED_MODULE_4__/* .writeSBOMSummary */ .k)(_actions_core__WEBPACK_IMPORTED_MODULE_0__, sbomEntries);
-        }
+    const reportJobSummary = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-job-summary');
+    if (reportJobSummary) {
+        const sbomEntries = (0,_sbom_summary_js__WEBPACK_IMPORTED_MODULE_4__/* .parseSBOMEntries */ .ws)(stopOutput);
+        const sbomEnabled = (0,_sbom_summary_js__WEBPACK_IMPORTED_MODULE_4__/* .isSBOMEnabled */ .iE)(stopOutput);
+        await (0,_sbom_summary_js__WEBPACK_IMPORTED_MODULE_4__/* .writeSBOMSummary */ .kq)(_actions_core__WEBPACK_IMPORTED_MODULE_0__, sbomEntries, { sbomEnabled });
     }
 
     if (retval !== 0) {
@@ -3677,8 +3676,9 @@ __webpack_handle_async_dependencies__();
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
 
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
-/* harmony export */   "w": () => (/* binding */ parseSBOMEntries),
-/* harmony export */   "k": () => (/* binding */ writeSBOMSummary)
+/* harmony export */   "ws": () => (/* binding */ parseSBOMEntries),
+/* harmony export */   "iE": () => (/* binding */ isSBOMEnabled),
+/* harmony export */   "kq": () => (/* binding */ writeSBOMSummary)
 /* harmony export */ });
 /**
  * Pure helpers for parsing and displaying SBOM results in the
@@ -3689,10 +3689,11 @@ __webpack_handle_async_dependencies__();
 /**
  * Parses SBOM file entries from cimon agent stop output.
  * Each JSON log line that contains `"SBOM files written"` is expected
- * to carry `cyclonedx` and/or `spdx` path fields.
+ * to carry `cyclonedx` and/or `spdx` path fields, and optionally
+ * `components`, `relationships`, and `artifacts` counts.
  *
  * @param {string} output - Combined stdout+stderr from `cimon agent stop`.
- * @returns {Array<{cyclonedx: string, spdx: string}>}
+ * @returns {Array<{cyclonedx: string, spdx: string, components: number, relationships: number, artifacts: number}>}
  */
 function parseSBOMEntries(output) {
     const entries = [];
@@ -3704,6 +3705,9 @@ function parseSBOMEntries(output) {
                 entries.push({
                     cyclonedx: parsed.cyclonedx || '',
                     spdx: parsed.spdx || '',
+                    components: parsed.components || 0,
+                    relationships: parsed.relationships || 0,
+                    artifacts: parsed.artifacts || 0,
                 });
             }
         } catch {
@@ -3714,29 +3718,96 @@ function parseSBOMEntries(output) {
 }
 
 /**
- * Builds a GitHub Actions job summary table from SBOM entries.
+ * Checks whether the cimon stop output indicates that SBOM generation
+ * was enabled (i.e. the feature was active, regardless of whether any
+ * SBOMs were actually produced).
+ *
+ * @param {string} output - Combined stdout+stderr from `cimon agent stop`.
+ * @returns {boolean}
+ */
+function isSBOMEnabled(output) {
+    // The SBOM feature logs at least one of these markers when active.
+    return (
+        output.includes('"SBOM files written"') ||
+        output.includes('"SBOM generation"') ||
+        output.includes('CIMON_SBOM_ENABLED')
+    );
+}
+
+/**
+ * Builds a GitHub Actions job summary with SBOM results.
+ * Handles three scenarios:
+ *   1. SBOMs generated   → table with details per SBOM
+ *   2. SBOM enabled but none generated → informational notice
+ *   3. SBOM not enabled  → no summary (silent)
  *
  * @param {import('@actions/core')} core - The @actions/core module.
- * @param {Array<{cyclonedx: string, spdx: string}>} sbomEntries
+ * @param {Array<{cyclonedx: string, spdx: string, components: number, relationships: number, artifacts: number}>} sbomEntries
+ * @param {{sbomEnabled: boolean}} options
  */
-async function writeSBOMSummary(core, sbomEntries) {
-    if (sbomEntries.length === 0) return;
+async function writeSBOMSummary(core, sbomEntries, options = {}) {
+    const { sbomEnabled = false } = options;
 
-    const rows = [['Format', 'Path']];
-    for (const entry of sbomEntries) {
-        if (entry.cyclonedx) {
-            rows.push(['CycloneDX', `\`${entry.cyclonedx}\``]);
+    // Case 3: SBOM not enabled — nothing to report.
+    if (sbomEntries.length === 0 && !sbomEnabled) return;
+
+    // Case 2: SBOM was enabled but produced no output.
+    if (sbomEntries.length === 0 && sbomEnabled) {
+        await core.summary
+            .addHeading('Cimon SBOM Report', 2)
+            .addRaw(
+                'SBOM generation was enabled but no SBOMs were produced. ' +
+                    'This can happen when no build artifacts (executables or libraries) were detected during the build.\n'
+            )
+            .write();
+        return;
+    }
+
+    // Case 1: SBOMs generated — build a rich summary.
+    const totalComponents = sbomEntries.reduce(
+        (sum, e) => sum + e.components,
+        0
+    );
+    const totalRelationships = sbomEntries.reduce(
+        (sum, e) => sum + e.relationships,
+        0
+    );
+
+    // Overview line.
+    const parts = [
+        `**${sbomEntries.length}** SBOM${sbomEntries.length > 1 ? 's' : ''} generated during build`,
+    ];
+    if (totalComponents > 0) {
+        parts.push(
+            `covering **${totalComponents}** component${totalComponents > 1 ? 's' : ''}` +
+                ` and **${totalRelationships}** relationship${totalRelationships !== 1 ? 's' : ''}`
+        );
+    }
+
+    // Detail table: one row per SBOM entry.
+    const hasStats = totalComponents > 0;
+    const header = hasStats
+        ? ['#', 'CycloneDX', 'SPDX', 'Components', 'Relationships']
+        : ['#', 'CycloneDX', 'SPDX'];
+
+    const rows = [header];
+    for (let i = 0; i < sbomEntries.length; i++) {
+        const entry = sbomEntries[i];
+        const row = [
+            `${i + 1}`,
+            entry.cyclonedx ? `\`${entry.cyclonedx}\`` : '-',
+            entry.spdx ? `\`${entry.spdx}\`` : '-',
+        ];
+        if (hasStats) {
+            row.push(`${entry.components}`);
+            row.push(`${entry.relationships}`);
         }
-        if (entry.spdx) {
-            rows.push(['SPDX', `\`${entry.spdx}\``]);
-        }
+        rows.push(row);
     }
 
     await core.summary
         .addHeading('Cimon SBOM Report', 2)
-        .addRaw(
-            `**${sbomEntries.length}** SBOM${sbomEntries.length > 1 ? 's' : ''} generated during build.\n\n`
-        )
+        .addRaw(parts.join(', ') + '.\n\n')
         .addTable(rows)
         .write();
 }

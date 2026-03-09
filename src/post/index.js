@@ -2,7 +2,11 @@ import core from '@actions/core';
 import exec from '@actions/exec';
 import fs from 'fs';
 import * as http from '@actions/http-client';
-import { parseSBOMEntries, writeSBOMSummary } from './sbom-summary.js';
+import {
+    parseSBOMEntries,
+    isSBOMEnabled,
+    writeSBOMSummary,
+} from './sbom-summary.js';
 
 const CIMON_SCRIPT_DOWNLOAD_URL =
     'https://cimon-releases.s3.amazonaws.com/install.sh';
@@ -114,12 +118,11 @@ async function run(config) {
     }
 
     // Parse and display SBOM summary regardless of stop exit code.
-    const sbomEntries = parseSBOMEntries(stopOutput);
-    if (sbomEntries.length > 0) {
-        const reportJobSummary = core.getBooleanInput('report-job-summary');
-        if (reportJobSummary) {
-            await writeSBOMSummary(core, sbomEntries);
-        }
+    const reportJobSummary = core.getBooleanInput('report-job-summary');
+    if (reportJobSummary) {
+        const sbomEntries = parseSBOMEntries(stopOutput);
+        const sbomEnabled = isSBOMEnabled(stopOutput);
+        await writeSBOMSummary(core, sbomEntries, { sbomEnabled });
     }
 
     if (retval !== 0) {
