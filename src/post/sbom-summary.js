@@ -91,14 +91,14 @@ export async function writeSBOMSummary(core, sbomEntries, options = {}) {
         0
     );
 
-    // Overview line.
+    // Overview line (uses HTML since addRaw renders HTML, not markdown).
     const parts = [
-        `**${sbomEntries.length}** SBOM${sbomEntries.length > 1 ? 's' : ''} generated during build`,
+        `<strong>${sbomEntries.length}</strong> SBOM${sbomEntries.length > 1 ? 's' : ''} generated during build`,
     ];
     if (totalComponents > 0) {
         parts.push(
-            `covering **${totalComponents}** component${totalComponents > 1 ? 's' : ''}` +
-                ` and **${totalRelationships}** relationship${totalRelationships !== 1 ? 's' : ''}`
+            `covering <strong>${totalComponents}</strong> component${totalComponents > 1 ? 's' : ''}` +
+                ` and <strong>${totalRelationships}</strong> relationship${totalRelationships !== 1 ? 's' : ''}`
         );
     }
 

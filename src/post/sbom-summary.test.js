@@ -306,9 +306,9 @@ describe('writeSBOMSummary', () => {
 
         // Overview with stats
         const raw = calls.find((c) => c.method === 'addRaw');
-        assert.ok(raw.text.includes('**1** SBOM generated'));
-        assert.ok(raw.text.includes('**42** components'));
-        assert.ok(raw.text.includes('**18** relationships'));
+        assert.ok(raw.text.includes('<strong>1</strong> SBOM generated'));
+        assert.ok(raw.text.includes('<strong>42</strong> component'));
+        assert.ok(raw.text.includes('<strong>18</strong> relationship'));
 
         // Table with stats columns
         const table = calls.find((c) => c.method === 'addTable');
@@ -350,9 +350,9 @@ describe('writeSBOMSummary', () => {
 
         const calls = mockCore.getCalls();
         const raw = calls.find((c) => c.method === 'addRaw');
-        assert.ok(raw.text.includes('**2** SBOMs generated'));
-        assert.ok(raw.text.includes('**30** components'));
-        assert.ok(raw.text.includes('**17** relationships'));
+        assert.ok(raw.text.includes('<strong>2</strong> SBOMs generated'));
+        assert.ok(raw.text.includes('<strong>30</strong> component'));
+        assert.ok(raw.text.includes('<strong>17</strong> relationship'));
 
         const table = calls.find((c) => c.method === 'addTable');
         // header + 2 data rows
@@ -420,10 +420,10 @@ describe('writeSBOMSummary', () => {
 
         const calls = mockCore.getCalls();
         const raw = calls.find((c) => c.method === 'addRaw');
-        assert.ok(raw.text.includes('**13** SBOMs generated'));
+        assert.ok(raw.text.includes('<strong>13</strong> SBOMs generated'));
 
         // Total components: sum of (11..23) = 221
-        assert.ok(raw.text.includes('**221** components'));
+        assert.ok(raw.text.includes('<strong>221</strong> component'));
 
         const table = calls.find((c) => c.method === 'addTable');
         // header + 13 rows
