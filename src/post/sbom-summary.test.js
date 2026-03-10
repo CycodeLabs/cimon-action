@@ -46,6 +46,7 @@ describe('parseSBOMEntries', () => {
             components: 42,
             relationships: 18,
             artifacts: 1,
+            hasStats: true,
         });
     });
 
@@ -61,6 +62,7 @@ describe('parseSBOMEntries', () => {
         assert.equal(entries[0].components, 0);
         assert.equal(entries[0].relationships, 0);
         assert.equal(entries[0].artifacts, 0);
+        assert.equal(entries[0].hasStats, false);
     });
 
     it('parses a single SBOM entry with only CycloneDX', () => {
@@ -260,6 +262,14 @@ describe('filterMeaningfulEntries', () => {
             { cyclonedx: '/sbom/libgit2-subbuild/sbom.cdx.json', spdx: '/sbom/libgit2-subbuild/sbom.spdx.json', components: 0, relationships: 0, artifacts: 0 },
         ];
         assert.equal(filterMeaningfulEntries(entries).length, 0);
+    });
+
+    it('keeps entries from older cimon without stats (hasStats=false)', () => {
+        const entries = [
+            { cyclonedx: '/build/sbom.cdx.json', spdx: '/build/sbom.spdx.json', components: 0, relationships: 0, artifacts: 0, hasStats: false },
+        ];
+        // Should NOT be filtered — we can't tell if it's empty or just missing stats
+        assert.equal(filterMeaningfulEntries(entries).length, 1);
     });
 
     it('filters real customer scenario: 35 TryCompile + 12 empty subbuilds + 2 real', () => {
