@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
     parseSBOMEntries,
     isSBOMEnabled,
+    filterMeaningfulEntries,
     writeSBOMSummary,
 } from './sbom-summary.js';
 
@@ -219,6 +220,94 @@ describe('isSBOMEnabled', () => {
 });
 
 // ---------------------------------------------------------------------------
+// filterMeaningfulEntries
+// ---------------------------------------------------------------------------
+describe('filterMeaningfulEntries', () => {
+    it('returns empty for empty input', () => {
+        assert.deepStrictEqual(filterMeaningfulEntries([]), []);
+    });
+
+    it('keeps entries with components > 1', () => {
+        const entries = [
+            { cyclonedx: '/a.json', spdx: '/b.json', components: 10, relationships: 5, artifacts: 1 },
+        ];
+        assert.equal(filterMeaningfulEntries(entries).length, 1);
+    });
+
+    it('keeps entries with relationships > 0 even if components <= 1', () => {
+        const entries = [
+            { cyclonedx: '/a.json', spdx: '/b.json', components: 1, relationships: 3, artifacts: 0 },
+        ];
+        assert.equal(filterMeaningfulEntries(entries).length, 1);
+    });
+
+    it('keeps entries with artifacts > 0 even if components <= 1', () => {
+        const entries = [
+            { cyclonedx: '/a.json', spdx: '/b.json', components: 0, relationships: 0, artifacts: 1 },
+        ];
+        assert.equal(filterMeaningfulEntries(entries).length, 1);
+    });
+
+    it('removes TryCompile-like entries (1 component, 0 relationships, 0 artifacts)', () => {
+        const entries = [
+            { cyclonedx: '/sbom/TryCompile-abc/sbom.cdx.json', spdx: '/sbom/TryCompile-abc/sbom.spdx.json', components: 1, relationships: 0, artifacts: 0 },
+        ];
+        assert.equal(filterMeaningfulEntries(entries).length, 0);
+    });
+
+    it('removes empty subbuild entries (0 components)', () => {
+        const entries = [
+            { cyclonedx: '/sbom/libgit2-subbuild/sbom.cdx.json', spdx: '/sbom/libgit2-subbuild/sbom.spdx.json', components: 0, relationships: 0, artifacts: 0 },
+        ];
+        assert.equal(filterMeaningfulEntries(entries).length, 0);
+    });
+
+    it('filters real customer scenario: 35 TryCompile + 12 empty subbuilds + 2 real', () => {
+        const entries = [];
+        // 35 TryCompile entries (1 component, 0 relationships)
+        for (let i = 0; i < 35; i++) {
+            entries.push({
+                cyclonedx: `/sbom/TryCompile-${i}/sbom.cdx.json`,
+                spdx: `/sbom/TryCompile-${i}/sbom.spdx.json`,
+                components: 1,
+                relationships: 0,
+                artifacts: 0,
+            });
+        }
+        // 12 empty subbuilds
+        for (const name of ['antlr4', 'lib-alpha', 'googletest', 'libgit2', 'lib-bravo', 'lua', 'lib-charlie', 'lib-delta', 'lib-echo', 'sol2', 'spdlog', 'syntax-highlighting']) {
+            entries.push({
+                cyclonedx: `/sbom/${name}-subbuild/sbom.cdx.json`,
+                spdx: `/sbom/${name}-subbuild/sbom.spdx.json`,
+                components: 0,
+                relationships: 0,
+                artifacts: 0,
+            });
+        }
+        // 2 real entries
+        entries.push({
+            cyclonedx: '/sbom/bin/sbom.cdx.json',
+            spdx: '/sbom/bin/sbom.spdx.json',
+            components: 10,
+            relationships: 10,
+            artifacts: 1,
+        });
+        entries.push({
+            cyclonedx: '/sbom/build-myapp/sbom.cdx.json',
+            spdx: '/sbom/build-myapp/sbom.spdx.json',
+            components: 60,
+            relationships: 1588,
+            artifacts: 12,
+        });
+
+        const filtered = filterMeaningfulEntries(entries);
+        assert.equal(filtered.length, 2);
+        assert.equal(filtered[0].components, 10);
+        assert.equal(filtered[1].components, 60);
+    });
+});
+
+// ---------------------------------------------------------------------------
 // writeSBOMSummary
 // ---------------------------------------------------------------------------
 describe('writeSBOMSummary', () => {
@@ -361,13 +450,14 @@ describe('writeSBOMSummary', () => {
 
     it('omits stats columns when older cimon has no stats', async () => {
         const mockCore = createMockCore();
+        // An entry with 0 components but >0 artifacts still passes the filter
         const entries = [
             {
                 cyclonedx: '/build/sbom.cdx.json',
                 spdx: '/build/sbom.spdx.json',
                 components: 0,
                 relationships: 0,
-                artifacts: 0,
+                artifacts: 1,
             },
         ];
 
@@ -376,7 +466,7 @@ describe('writeSBOMSummary', () => {
         const calls = mockCore.getCalls();
         const raw = calls.find((c) => c.method === 'addRaw');
         // Should NOT contain component stats since totals are 0
-        assert.ok(!raw.text.includes('components'));
+        assert.ok(!raw.text.includes('component'));
 
         const table = calls.find((c) => c.method === 'addTable');
         // Only 3 columns: #, CycloneDX, SPDX (no stats columns)
@@ -403,31 +493,93 @@ describe('writeSBOMSummary', () => {
         assert.equal(table.rows[1][2], '-');
     });
 
-    it('handles 13 SBOM entries (real customer scenario)', async () => {
+    it('filters out noise entries and shows skipped count', async () => {
         const mockCore = createMockCore();
-        const entries = [];
-        for (let i = 1; i <= 13; i++) {
-            entries.push({
-                cyclonedx: `/sbom/build-sub${i}/sbom.cdx.json`,
-                spdx: `/sbom/build-sub${i}/sbom.spdx.json`,
-                components: 10 + i,
-                relationships: 5 + i,
-                artifacts: 1,
-            });
-        }
+        const entries = [
+            // TryCompile noise (1 component, 0 relationships, 0 artifacts)
+            { cyclonedx: '/sbom/TryCompile-abc/sbom.cdx.json', spdx: '/sbom/TryCompile-abc/sbom.spdx.json', components: 1, relationships: 0, artifacts: 0 },
+            { cyclonedx: '/sbom/TryCompile-def/sbom.cdx.json', spdx: '/sbom/TryCompile-def/sbom.spdx.json', components: 1, relationships: 0, artifacts: 0 },
+            // Empty subbuild noise
+            { cyclonedx: '/sbom/libgit2-subbuild/sbom.cdx.json', spdx: '/sbom/libgit2-subbuild/sbom.spdx.json', components: 0, relationships: 0, artifacts: 0 },
+            // Real entry
+            { cyclonedx: '/sbom/build-myapp/sbom.cdx.json', spdx: '/sbom/build-myapp/sbom.spdx.json', components: 60, relationships: 1588, artifacts: 12 },
+        ];
 
         await writeSBOMSummary(mockCore, entries);
 
         const calls = mockCore.getCalls();
         const raw = calls.find((c) => c.method === 'addRaw');
-        assert.ok(raw.text.includes('<strong>13</strong> SBOMs generated'));
-
-        // Total components: sum of (11..23) = 221
-        assert.ok(raw.text.includes('<strong>221</strong> component'));
+        // Only 1 meaningful entry
+        assert.ok(raw.text.includes('<strong>1</strong> SBOM generated'));
+        assert.ok(raw.text.includes('<strong>60</strong> component'));
+        // 3 skipped
+        assert.ok(raw.text.includes('3 empty build sessions omitted'));
 
         const table = calls.find((c) => c.method === 'addTable');
-        // header + 13 rows
-        assert.equal(table.rows.length, 14);
+        // header + 1 data row (only the real entry)
+        assert.equal(table.rows.length, 2);
+        assert.ok(table.rows[1][1].includes('build-myapp'));
+    });
+
+    it('shows notice when all entries are noise and SBOM enabled', async () => {
+        const mockCore = createMockCore();
+        const entries = [
+            { cyclonedx: '/sbom/TryCompile-abc/sbom.cdx.json', spdx: '', components: 1, relationships: 0, artifacts: 0 },
+            { cyclonedx: '/sbom/sub-subbuild/sbom.cdx.json', spdx: '', components: 0, relationships: 0, artifacts: 0 },
+        ];
+
+        await writeSBOMSummary(mockCore, entries, { sbomEnabled: true });
+
+        const calls = mockCore.getCalls();
+        const raw = calls.find((c) => c.method === 'addRaw');
+        assert.ok(raw.text.includes('no SBOMs with meaningful content'));
+        assert.ok(raw.text.includes('2 build sessions were detected'));
+        // No table should be rendered
+        assert.ok(!calls.find((c) => c.method === 'addTable'));
+    });
+
+    it('handles real customer scenario: 35 TryCompile + 12 empty + 2 real', async () => {
+        const mockCore = createMockCore();
+        const entries = [];
+        // 35 TryCompile
+        for (let i = 0; i < 35; i++) {
+            entries.push({
+                cyclonedx: `/sbom/TryCompile-${i}/sbom.cdx.json`,
+                spdx: `/sbom/TryCompile-${i}/sbom.spdx.json`,
+                components: 1, relationships: 0, artifacts: 0,
+            });
+        }
+        // 12 empty subbuilds
+        for (let i = 0; i < 12; i++) {
+            entries.push({
+                cyclonedx: `/sbom/sub${i}-subbuild/sbom.cdx.json`,
+                spdx: `/sbom/sub${i}-subbuild/sbom.spdx.json`,
+                components: 0, relationships: 0, artifacts: 0,
+            });
+        }
+        // 2 real
+        entries.push({
+            cyclonedx: '/sbom/bin/sbom.cdx.json',
+            spdx: '/sbom/bin/sbom.spdx.json',
+            components: 10, relationships: 10, artifacts: 1,
+        });
+        entries.push({
+            cyclonedx: '/sbom/build-myapp/sbom.cdx.json',
+            spdx: '/sbom/build-myapp/sbom.spdx.json',
+            components: 60, relationships: 1588, artifacts: 12,
+        });
+
+        await writeSBOMSummary(mockCore, entries);
+
+        const calls = mockCore.getCalls();
+        const raw = calls.find((c) => c.method === 'addRaw');
+        assert.ok(raw.text.includes('<strong>2</strong> SBOMs generated'));
+        assert.ok(raw.text.includes('<strong>70</strong> component'));
+        assert.ok(raw.text.includes('47 empty build sessions omitted'));
+
+        const table = calls.find((c) => c.method === 'addTable');
+        // header + 2 real rows only
+        assert.equal(table.rows.length, 3);
     });
 });
 
