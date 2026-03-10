@@ -3709,6 +3709,10 @@ function parseSBOMEntries(output) {
                     components: parsed.components || 0,
                     relationships: parsed.relationships || 0,
                     artifacts: parsed.artifacts || 0,
+                    // Track whether stats were actually present in the log line.
+                    // Older cimon versions may not emit these fields — we should
+                    // NOT filter those entries since we can't tell if they're empty.
+                    hasStats: 'components' in parsed,
                 });
             }
         } catch {
@@ -3746,9 +3750,12 @@ function isSBOMEnabled(output) {
  * @returns {Array<{cyclonedx: string, spdx: string, components: number, relationships: number, artifacts: number}>}
  */
 function filterMeaningfulEntries(entries) {
-    return entries.filter(
-        (e) => e.components > 1 || e.relationships > 0 || e.artifacts > 0
-    );
+    return entries.filter((e) => {
+        // If stats weren't present in the log line (older cimon), keep the
+        // entry — we can't determine whether it's meaningful or noise.
+        if (e.hasStats === false) return true;
+        return e.components > 1 || e.relationships > 0 || e.artifacts > 0;
+    });
 }
 
 /**
