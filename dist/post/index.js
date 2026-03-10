@@ -3680,6 +3680,7 @@ __webpack_handle_async_dependencies__();
 /* harmony export */   "iE": () => (/* binding */ isSBOMEnabled),
 /* harmony export */   "kq": () => (/* binding */ writeSBOMSummary)
 /* harmony export */ });
+/* unused harmony export filterMeaningfulEntries */
 /**
  * Pure helpers for parsing and displaying SBOM results in the
  * GitHub Actions job summary.  Extracted so they can be unit-tested
@@ -3735,11 +3736,30 @@ function isSBOMEnabled(output) {
 }
 
 /**
+ * Filters SBOM entries to only those with meaningful content
+ * (at least 1 component or artifact).  Entries from CMake TryCompile
+ * scratch directories and FetchContent subbuild-only sessions are
+ * typically empty or contain a single synthetic component and should
+ * be omitted from the summary.
+ *
+ * @param {Array<{cyclonedx: string, spdx: string, components: number, relationships: number, artifacts: number}>} entries
+ * @returns {Array<{cyclonedx: string, spdx: string, components: number, relationships: number, artifacts: number}>}
+ */
+function filterMeaningfulEntries(entries) {
+    return entries.filter(
+        (e) => e.components > 1 || e.relationships > 0 || e.artifacts > 0
+    );
+}
+
+/**
  * Builds a GitHub Actions job summary with SBOM results.
  * Handles three scenarios:
- *   1. SBOMs generated   → table with details per SBOM
- *   2. SBOM enabled but none generated → informational notice
- *   3. SBOM not enabled  → no summary (silent)
+ *   1. SBOMs generated   -> table with details per SBOM
+ *   2. SBOM enabled but none generated -> informational notice
+ *   3. SBOM not enabled  -> no summary (silent)
+ *
+ * Only entries with meaningful content are shown in the table.
+ * The overview line reports the count of meaningful SBOMs.
  *
  * @param {import('@actions/core')} core - The @actions/core module.
  * @param {Array<{cyclonedx: string, spdx: string, components: number, relationships: number, artifacts: number}>} sbomEntries
@@ -3763,19 +3783,35 @@ async function writeSBOMSummary(core, sbomEntries, options = {}) {
         return;
     }
 
+    // Filter out noise (TryCompile, empty subbuilds, etc.)
+    const meaningful = filterMeaningfulEntries(sbomEntries);
+
+    // If all entries were noise, show a notice instead.
+    if (meaningful.length === 0 && sbomEnabled) {
+        await core.summary
+            .addHeading('Cimon SBOM Report', 2)
+            .addRaw(
+                'SBOM generation was enabled but no SBOMs with meaningful content were produced. ' +
+                    `${sbomEntries.length} build session${sbomEntries.length !== 1 ? 's were' : ' was'} detected but ` +
+                    'contained no components (e.g. CMake feature-detection tests or download-only sub-builds).\n'
+            )
+            .write();
+        return;
+    }
+
     // Case 1: SBOMs generated — build a rich summary.
-    const totalComponents = sbomEntries.reduce(
+    const totalComponents = meaningful.reduce(
         (sum, e) => sum + e.components,
         0
     );
-    const totalRelationships = sbomEntries.reduce(
+    const totalRelationships = meaningful.reduce(
         (sum, e) => sum + e.relationships,
         0
     );
 
     // Overview line (uses HTML since addRaw renders HTML, not markdown).
     const parts = [
-        `<strong>${sbomEntries.length}</strong> SBOM${sbomEntries.length > 1 ? 's' : ''} generated during build`,
+        `<strong>${meaningful.length}</strong> SBOM${meaningful.length > 1 ? 's' : ''} generated during build`,
     ];
     if (totalComponents > 0) {
         parts.push(
@@ -3783,16 +3819,23 @@ async function writeSBOMSummary(core, sbomEntries, options = {}) {
                 ` and <strong>${totalRelationships}</strong> relationship${totalRelationships !== 1 ? 's' : ''}`
         );
     }
+    // Note skipped entries if any were filtered out.
+    const skipped = sbomEntries.length - meaningful.length;
+    if (skipped > 0) {
+        parts.push(
+            `${skipped} empty build session${skipped !== 1 ? 's' : ''} omitted`
+        );
+    }
 
-    // Detail table: one row per SBOM entry.
+    // Detail table: one row per meaningful SBOM entry.
     const hasStats = totalComponents > 0;
     const header = hasStats
         ? ['#', 'CycloneDX', 'SPDX', 'Components', 'Relationships']
         : ['#', 'CycloneDX', 'SPDX'];
 
     const rows = [header];
-    for (let i = 0; i < sbomEntries.length; i++) {
-        const entry = sbomEntries[i];
+    for (let i = 0; i < meaningful.length; i++) {
+        const entry = meaningful[i];
         const row = [
             `${i + 1}`,
             entry.cyclonedx ? `<code>${entry.cyclonedx}</code>` : '-',
