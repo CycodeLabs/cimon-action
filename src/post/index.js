@@ -1,7 +1,9 @@
 import core from '@actions/core';
 import exec from '@actions/exec';
 import fs from 'fs';
+import path from 'path';
 import * as http from '@actions/http-client';
+import { DefaultArtifactClient } from '@actions/artifact';
 import {
     parseSBOMEntries,
     isSBOMEnabled,
@@ -117,17 +119,100 @@ async function run(config) {
         retval = await exec.exec(cimonPath, ['agent', 'stop'], options);
     }
 
-    // Parse and display SBOM summary regardless of stop exit code.
+    // Parse SBOM entries from the stop output (always, for upload and summary).
+    const sbomEntries = parseSBOMEntries(stopOutput);
+    const sbomEnabled = isSBOMEnabled(stopOutput);
+
+    // Display SBOM summary in job summary.
     const reportJobSummary = core.getBooleanInput('report-job-summary');
     if (reportJobSummary) {
-        const sbomEntries = parseSBOMEntries(stopOutput);
-        const sbomEnabled = isSBOMEnabled(stopOutput);
         await writeSBOMSummary(core, sbomEntries, { sbomEnabled });
     }
+
+    // Upload SBOM files as artifacts (best-effort, never fails the workflow).
+    await uploadSBOMArtifacts(sbomEntries);
 
     if (retval !== 0) {
         throw new Error(`Failed stopping Cimon process: ${retval}`);
     }
+}
+
+/**
+ * Uploads SBOM files as GitHub Actions artifacts after cimon stop.
+ * This runs in the post step — after cimon has flushed all SBOMs to disk —
+ * so files are guaranteed to exist (unlike user upload steps that may race
+ * with async SBOM generation).
+ *
+ * Best-effort: errors are logged as warnings, never fail the workflow.
+ */
+async function uploadSBOMArtifacts(sbomEntries) {
+    if (!sbomEntries || sbomEntries.length === 0) return;
+
+    // Collect all existing SBOM files from parsed entries.
+    const filesToUpload = [];
+    for (const entry of sbomEntries) {
+        // Skip entries with trivial content (TryCompile noise, etc.)
+        if (entry.hasStats && entry.components <= 1 && entry.relationships === 0 && entry.artifacts === 0) {
+            continue;
+        }
+        for (const filePath of [entry.cyclonedx, entry.spdx]) {
+            if (filePath && fs.existsSync(filePath)) {
+                filesToUpload.push(filePath);
+            }
+        }
+    }
+
+    if (filesToUpload.length === 0) {
+        core.info('SBOM: no files to upload as artifacts');
+        return;
+    }
+
+    // Also include evidence files if they sit alongside the SBOMs.
+    for (const sbomFile of [...filesToUpload]) {
+        const dir = path.dirname(sbomFile);
+        const evidencePath = path.join(dir, 'sbom.evidence.json');
+        if (fs.existsSync(evidencePath) && !filesToUpload.includes(evidencePath)) {
+            filesToUpload.push(evidencePath);
+        }
+    }
+
+    // Determine the common root directory for all files.
+    const rootDir = findCommonRoot(filesToUpload);
+
+    try {
+        const artifact = new DefaultArtifactClient();
+        const { id, size } = await artifact.uploadArtifact(
+            'cimon-sbom',
+            filesToUpload,
+            rootDir,
+            { retentionDays: 90 }
+        );
+        core.info(`SBOM: uploaded ${filesToUpload.length} files as artifact (id=${id}, size=${size})`);
+    } catch (err) {
+        // Best-effort — never fail the workflow because of upload issues.
+        core.warning(`SBOM: artifact upload failed (non-fatal): ${err.message}`);
+    }
+}
+
+/**
+ * Find the longest common directory prefix for a list of absolute paths.
+ */
+function findCommonRoot(paths) {
+    if (paths.length === 0) return '/';
+    if (paths.length === 1) return path.dirname(paths[0]);
+
+    const dirs = paths.map((p) => path.dirname(p));
+    const segments = dirs[0].split(path.sep);
+    let common = '';
+    for (let i = 0; i < segments.length; i++) {
+        const candidate = segments.slice(0, i + 1).join(path.sep) || path.sep;
+        if (dirs.every((d) => d.startsWith(candidate + path.sep) || d === candidate)) {
+            common = candidate;
+        } else {
+            break;
+        }
+    }
+    return common || path.sep;
 }
 
 try {
