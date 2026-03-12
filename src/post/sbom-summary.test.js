@@ -177,8 +177,8 @@ describe('parseSBOMEntries', () => {
             caller: 'generator.go:520',
             msg: 'SBOM files written',
             cyclonedx:
-                '/data/home/runner/work/proj/proj/sbom/build-logalyzer/sbom.cdx.json',
-            spdx: '/data/home/runner/work/proj/proj/sbom/build-logalyzer/sbom.spdx.json',
+                '/data/home/runner/work/proj/proj/sbom/build-myapp/sbom.cdx.json',
+            spdx: '/data/home/runner/work/proj/proj/sbom/build-myapp/sbom.spdx.json',
             components: 42,
             relationships: 104,
             artifacts: 3,
@@ -303,8 +303,8 @@ describe('filterMeaningfulEntries', () => {
             artifacts: 1,
         });
         entries.push({
-            cyclonedx: '/sbom/build-logalyzer/sbom.cdx.json',
-            spdx: '/sbom/build-logalyzer/sbom.spdx.json',
+            cyclonedx: '/sbom/build-myapp/sbom.cdx.json',
+            spdx: '/sbom/build-myapp/sbom.spdx.json',
             components: 60,
             relationships: 1588,
             artifacts: 12,
@@ -512,7 +512,7 @@ describe('writeSBOMSummary', () => {
             // Empty subbuild noise
             { cyclonedx: '/sbom/libgit2-subbuild/sbom.cdx.json', spdx: '/sbom/libgit2-subbuild/sbom.spdx.json', components: 0, relationships: 0, artifacts: 0 },
             // Real entry
-            { cyclonedx: '/sbom/build-logalyzer/sbom.cdx.json', spdx: '/sbom/build-logalyzer/sbom.spdx.json', components: 60, relationships: 1588, artifacts: 12 },
+            { cyclonedx: '/sbom/build-myapp/sbom.cdx.json', spdx: '/sbom/build-myapp/sbom.spdx.json', components: 60, relationships: 1588, artifacts: 12 },
         ];
 
         await writeSBOMSummary(mockCore, entries);
@@ -528,7 +528,7 @@ describe('writeSBOMSummary', () => {
         const table = calls.find((c) => c.method === 'addTable');
         // header + 1 data row (only the real entry)
         assert.equal(table.rows.length, 2);
-        assert.ok(table.rows[1][1].includes('build-logalyzer'));
+        assert.ok(table.rows[1][1].includes('build-myapp'));
     });
 
     it('shows notice when all entries are noise and SBOM enabled', async () => {
@@ -574,8 +574,8 @@ describe('writeSBOMSummary', () => {
             components: 10, relationships: 10, artifacts: 1,
         });
         entries.push({
-            cyclonedx: '/sbom/build-logalyzer/sbom.cdx.json',
-            spdx: '/sbom/build-logalyzer/sbom.spdx.json',
+            cyclonedx: '/sbom/build-myapp/sbom.cdx.json',
+            spdx: '/sbom/build-myapp/sbom.spdx.json',
             components: 60, relationships: 1588, artifacts: 12,
         });
 

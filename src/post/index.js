@@ -176,8 +176,21 @@ async function uploadSBOMArtifacts(sbomEntries) {
         }
     }
 
-    // Determine the common root directory for all files.
-    const rootDir = findCommonRoot(filesToUpload);
+    // Determine the root directory for artifact paths.
+    // When CIMON_SBOM_OUTPUT_DIRECTORY is set, use it directly so that
+    // the artifact ZIP contains clean relative paths like
+    // "build-myapp/sbom.cdx.json" instead of full host paths.
+    let rootDir;
+    const sbomOutputDir = process.env.CIMON_SBOM_OUTPUT_DIRECTORY;
+    if (sbomOutputDir) {
+        const normalizedOutputDir = path.resolve(sbomOutputDir);
+        const allUnderOutputDir = filesToUpload.every(
+            (f) => f.startsWith(normalizedOutputDir + path.sep) || f === normalizedOutputDir
+        );
+        rootDir = allUnderOutputDir ? normalizedOutputDir : findCommonRoot(filesToUpload);
+    } else {
+        rootDir = findCommonRoot(filesToUpload);
+    }
 
     try {
         const artifact = new DefaultArtifactClient();
