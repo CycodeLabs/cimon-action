@@ -64,7 +64,17 @@ async function downloadV1Binary(version) {
     // forge a valid signature without the private key.
     let cosignVerified = false;
     try {
-        await downloadBinaryToFile(`${baseUrl}/checksums.txt.sig`, checksumSigPath);
+        const sigResponse = await httpClient.get(`${baseUrl}/checksums.txt.sig`);
+        if (sigResponse.message.statusCode !== 200) {
+            throw new Error(`Signature file not found (HTTP ${sigResponse.message.statusCode})`);
+        }
+        const sigChunks = [];
+        await new Promise((resolve, reject) => {
+            sigResponse.message.on('data', (chunk) => sigChunks.push(chunk));
+            sigResponse.message.on('end', resolve);
+            sigResponse.message.on('error', reject);
+        });
+        fs.writeFileSync(checksumSigPath, Buffer.concat(sigChunks));
 
         const cosignPath = await installCosign();
 
