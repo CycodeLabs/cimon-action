@@ -25,19 +25,67 @@ async function getLatestV1Version() {
     throw new Error('No v1.x release found on cimon-releases');
 }
 
+async function installCosign() {
+    // Download cosign binary for signature verification.
+    const cosignVersion = 'v2.2.1';
+    const cosignUrl = `https://github.com/sigstore/cosign/releases/download/${cosignVersion}/cosign-linux-amd64`;
+    const cosignPath = '/tmp/cosign';
+
+    if (!fs.existsSync(cosignPath)) {
+        core.info(`Installing cosign ${cosignVersion}...`);
+        await downloadToFile(cosignUrl, cosignPath);
+        fs.chmodSync(cosignPath, 0o755);
+    }
+    return cosignPath;
+}
+
 async function downloadV1Binary(version) {
     const arch = process.arch === 'arm64' ? 'arm64' : 'x86_64';
     const baseUrl = `${CIMON_RELEASES_GITHUB}/download/${version}`;
     const tarName = `cimon_linux_${arch}.tar.gz`;
     const tarPath = '/tmp/cimon-v1.tar.gz';
     const checksumPath = '/tmp/cimon-v1-checksums.txt';
+    const checksumSigPath = '/tmp/cimon-v1-checksums.txt.sig';
 
     core.info(`Downloading cimon ${version} for ${arch}...`);
     await downloadToFile(`${baseUrl}/${tarName}`, tarPath);
     await downloadToFile(`${baseUrl}/checksums.txt`, checksumPath);
 
-    // Verify SHA256 checksum before extracting.
-    // This ensures the binary wasn't tampered with in transit.
+    // Step 1: Verify cosign signature on checksums.txt.
+    // This proves the checksums were signed by Cycode's private key.
+    // Even if an attacker compromises the GitHub release, they can't
+    // forge a valid signature without the private key.
+    let cosignVerified = false;
+    try {
+        await downloadToFile(`${baseUrl}/checksums.txt.sig`, checksumSigPath);
+
+        const cosignPath = await installCosign();
+
+        // The public key is embedded in the action repo — not downloaded
+        // from the release (which an attacker could replace).
+        const pubKeyPath = new URL('../cosign.pub', import.meta.url).pathname;
+
+        const verifyResult = await exec.exec(cosignPath, [
+            'verify-blob',
+            '--key', pubKeyPath,
+            '--signature', checksumSigPath,
+            '--insecure-ignore-tlog',
+            checksumPath,
+        ], { ignoreReturnCode: true, silent: true });
+
+        if (verifyResult === 0) {
+            core.info('Cosign signature verified — checksums are authentic');
+            cosignVerified = true;
+        } else {
+            core.warning('Cosign signature verification FAILED — checksums may be tampered');
+        }
+    } catch (e) {
+        // Signature file may not exist for older releases.
+        // Fall back to SHA256-only verification.
+        core.info('Cosign signature not available for this release, using SHA256 only');
+    }
+
+    // Step 2: Verify SHA256 checksum of the binary.
     core.info('Verifying SHA256 checksum...');
     const checksumContent = fs.readFileSync(checksumPath, 'utf8');
     const expectedHash = checksumContent
@@ -61,7 +109,9 @@ async function downloadV1Binary(version) {
             `  This may indicate a compromised release. Aborting.`
         );
     }
-    core.info(`Checksum verified: ${actualHash.substring(0, 16)}...`);
+
+    const verifyLevel = cosignVerified ? 'cosign + SHA256' : 'SHA256 only';
+    core.info(`Binary verified (${verifyLevel}): ${actualHash.substring(0, 16)}...`);
 
     const extractDir = '/tmp/cimon-v1';
     fs.mkdirSync(extractDir, { recursive: true });

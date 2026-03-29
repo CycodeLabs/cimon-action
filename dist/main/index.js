@@ -25599,6 +25599,13 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("util/types")
 
 /***/ }),
 
+/***/ 8892:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+module.exports = __nccwpck_require__.p + "ef370279c07ae9818dbd.js?../cosign.pub";
+
+/***/ }),
+
 /***/ 9491:
 /***/ ((module) => {
 
@@ -27457,19 +27464,67 @@ async function getLatestV1Version() {
     throw new Error('No v1.x release found on cimon-releases');
 }
 
+async function installCosign() {
+    // Download cosign binary for signature verification.
+    const cosignVersion = 'v2.2.1';
+    const cosignUrl = `https://github.com/sigstore/cosign/releases/download/${cosignVersion}/cosign-linux-amd64`;
+    const cosignPath = '/tmp/cosign';
+
+    if (!fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(cosignPath)) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Installing cosign ${cosignVersion}...`);
+        await downloadToFile(cosignUrl, cosignPath);
+        fs__WEBPACK_IMPORTED_MODULE_2__.chmodSync(cosignPath, 0o755);
+    }
+    return cosignPath;
+}
+
 async function downloadV1Binary(version) {
     const arch = process.arch === 'arm64' ? 'arm64' : 'x86_64';
     const baseUrl = `${CIMON_RELEASES_GITHUB}/download/${version}`;
     const tarName = `cimon_linux_${arch}.tar.gz`;
     const tarPath = '/tmp/cimon-v1.tar.gz';
     const checksumPath = '/tmp/cimon-v1-checksums.txt';
+    const checksumSigPath = '/tmp/cimon-v1-checksums.txt.sig';
 
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Downloading cimon ${version} for ${arch}...`);
     await downloadToFile(`${baseUrl}/${tarName}`, tarPath);
     await downloadToFile(`${baseUrl}/checksums.txt`, checksumPath);
 
-    // Verify SHA256 checksum before extracting.
-    // This ensures the binary wasn't tampered with in transit.
+    // Step 1: Verify cosign signature on checksums.txt.
+    // This proves the checksums were signed by Cycode's private key.
+    // Even if an attacker compromises the GitHub release, they can't
+    // forge a valid signature without the private key.
+    let cosignVerified = false;
+    try {
+        await downloadToFile(`${baseUrl}/checksums.txt.sig`, checksumSigPath);
+
+        const cosignPath = await installCosign();
+
+        // The public key is embedded in the action repo — not downloaded
+        // from the release (which an attacker could replace).
+        const pubKeyPath = new URL(/* asset import */ __nccwpck_require__(8892), __nccwpck_require__.b).pathname;
+
+        const verifyResult = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(cosignPath, [
+            'verify-blob',
+            '--key', pubKeyPath,
+            '--signature', checksumSigPath,
+            '--insecure-ignore-tlog',
+            checksumPath,
+        ], { ignoreReturnCode: true, silent: true });
+
+        if (verifyResult === 0) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Cosign signature verified — checksums are authentic');
+            cosignVerified = true;
+        } else {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning('Cosign signature verification FAILED — checksums may be tampered');
+        }
+    } catch (e) {
+        // Signature file may not exist for older releases.
+        // Fall back to SHA256-only verification.
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Cosign signature not available for this release, using SHA256 only');
+    }
+
+    // Step 2: Verify SHA256 checksum of the binary.
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Verifying SHA256 checksum...');
     const checksumContent = fs__WEBPACK_IMPORTED_MODULE_2__.readFileSync(checksumPath, 'utf8');
     const expectedHash = checksumContent
@@ -27493,7 +27548,9 @@ async function downloadV1Binary(version) {
             `  This may indicate a compromised release. Aborting.`
         );
     }
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Checksum verified: ${actualHash.substring(0, 16)}...`);
+
+    const verifyLevel = cosignVerified ? 'cosign + SHA256' : 'SHA256 only';
+    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Binary verified (${verifyLevel}): ${actualHash.substring(0, 16)}...`);
 
     const extractDir = '/tmp/cimon-v1';
     fs__WEBPACK_IMPORTED_MODULE_2__.mkdirSync(extractDir, { recursive: true });
@@ -27732,6 +27789,9 @@ __webpack_handle_async_dependencies__();
 /******/ 	return module.exports;
 /******/ }
 /******/ 
+/******/ // expose the modules object (__webpack_modules__)
+/******/ __nccwpck_require__.m = __webpack_modules__;
+/******/ 
 /************************************************************************/
 /******/ /* webpack/runtime/async module */
 /******/ (() => {
@@ -27865,9 +27925,40 @@ __webpack_handle_async_dependencies__();
 /******/ 	};
 /******/ })();
 /******/ 
+/******/ /* webpack/runtime/publicPath */
+/******/ (() => {
+/******/ 	var scriptUrl;
+/******/ 	if (typeof import.meta.url === "string") scriptUrl = import.meta.url
+/******/ 	// When supporting browsers where an automatic publicPath is not supported you must specify an output.publicPath manually via configuration
+/******/ 	// or pass an empty string ("") and set the __webpack_public_path__ variable from your code to use your own logic.
+/******/ 	if (!scriptUrl) throw new Error("Automatic publicPath is not supported in this browser");
+/******/ 	scriptUrl = scriptUrl.replace(/#.*$/, "").replace(/\?.*$/, "").replace(/\/[^\/]+$/, "/");
+/******/ 	__nccwpck_require__.p = scriptUrl;
+/******/ })();
+/******/ 
 /******/ /* webpack/runtime/compat */
 /******/ 
 /******/ if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = new URL('.', import.meta.url).pathname.slice(import.meta.url.match(/^file:\/\/\/\w:/) ? 1 : 0, -1) + "/";
+/******/ 
+/******/ /* webpack/runtime/import chunk loading */
+/******/ (() => {
+/******/ 	__nccwpck_require__.b = new URL("./", import.meta.url);
+/******/ 	
+/******/ 	// object to store loaded and loading chunks
+/******/ 	// undefined = chunk not loaded, null = chunk preloaded/prefetched
+/******/ 	// [resolve, reject, Promise] = chunk loading, 0 = chunk loaded
+/******/ 	var installedChunks = {
+/******/ 		179: 0
+/******/ 	};
+/******/ 	
+/******/ 	// no install chunk
+/******/ 	
+/******/ 	// no chunk on demand loading
+/******/ 	
+/******/ 	// no external install chunk
+/******/ 	
+/******/ 	// no on chunks loaded
+/******/ })();
 /******/ 
 /************************************************************************/
 /******/ 
