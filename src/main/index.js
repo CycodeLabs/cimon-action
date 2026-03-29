@@ -9,6 +9,38 @@ const CIMON_SCRIPT_PATH = '/tmp/install.sh';
 const CIMON_EXECUTABLE_DIR = '/tmp/cimon';
 const CIMON_EXECUTABLE_PATH = '/tmp/cimon/cimon';
 
+// For v1+, download a specific version from GitHub releases instead of S3 latest.
+const CIMON_RELEASES_GITHUB = 'https://github.com/CycodeLabs/cimon-releases/releases';
+
+async function getLatestV1Version() {
+    const response = await httpClient.getJson(
+        'https://api.github.com/repos/CycodeLabs/cimon-releases/releases'
+    );
+    const releases = response.result;
+    for (const release of releases) {
+        if (release.tag_name && release.tag_name.startsWith('v1.') && !release.draft) {
+            return release.tag_name;
+        }
+    }
+    throw new Error('No v1.x release found on cimon-releases');
+}
+
+async function downloadV1Binary(version) {
+    const arch = process.arch === 'arm64' ? 'arm64' : 'x86_64';
+    const url = `${CIMON_RELEASES_GITHUB}/download/${version}/cimon_linux_${arch}.tar.gz`;
+    const tarPath = '/tmp/cimon-v1.tar.gz';
+
+    core.info(`Downloading cimon ${version} for ${arch}...`);
+    await downloadToFile(url, tarPath);
+
+    const extractDir = '/tmp/cimon-v1';
+    fs.mkdirSync(extractDir, { recursive: true });
+    await exec.exec('tar', ['-xzf', tarPath, '-C', extractDir]);
+    fs.chmodSync(`${extractDir}/cimon`, 0o755);
+
+    return `${extractDir}/cimon`;
+}
+
 const httpClient = new http.HttpClient('cimon-action');
 
 async function downloadToFile(url, filePath) {
@@ -38,6 +70,9 @@ function getActionConfig() {
             url: core.getInput('url'),
             featureGates: core.getMultilineInput('feature-gates'),
             releasePath: core.getInput('release-path'),
+            hardening: core.getInput('hardening') === 'true',
+            hardeningTier: core.getInput('hardening-tier') || '2',
+            hardeningDisabledRules: core.getInput('hardening-disabled-rules') || '',
         },
         report: {
             processTree: core.getBooleanInput('report-process-tree'),
@@ -72,6 +107,10 @@ async function run(config) {
         }
 
         releasePath = config.cimon.releasePath;
+    } else if (config.cimon.hardening) {
+        // Hardening requires v1.x binary. Auto-download latest v1.x release.
+        const version = await getLatestV1Version();
+        releasePath = await downloadV1Binary(version);
     } else {
         core.info('Running Cimon from latest release path');
 
@@ -129,6 +168,29 @@ async function run(config) {
     if (config.cimon.memoryProtection) {
         // Feature flags that required for the memory protection module.
         env.CIMON_FEATURE_GATES = 'FSSensor=1';
+    }
+
+    if (config.cimon.hardening) {
+        // Build hardening feature gates based on tier level.
+        const tier = parseInt(config.cimon.hardeningTier) || 2;
+        const hardeningGates = [
+            'Hardening=true',
+            `HardeningTier1=${tier >= 1 ? 'true' : 'false'}`,
+            `HardeningTier2=${tier >= 2 ? 'true' : 'false'}`,
+            `HardeningTier3=${tier >= 3 ? 'true' : 'false'}`,
+        ].join(',');
+
+        // Append to existing feature gates rather than overwriting.
+        if (env.CIMON_FEATURE_GATES) {
+            env.CIMON_FEATURE_GATES += ',' + hardeningGates;
+        } else {
+            env.CIMON_FEATURE_GATES = hardeningGates;
+        }
+
+        if (config.cimon.hardeningDisabledRules) {
+            env.CIMON_HARDENING_DISABLED_RULES =
+                config.cimon.hardeningDisabledRules;
+        }
     }
 
     var retval;
