@@ -285,13 +285,19 @@ async function run(config) {
 
     if (config.cimon.hardening) {
         // Build hardening feature gates based on tier level.
+        // Also enable FSSensor — required for FS-based hardening rules
+        // (sensitive-reads, proc-mem-read, systemd-install, etc.)
         const tier = parseInt(config.cimon.hardeningTier) || 2;
         const hardeningGates = [
             'Hardening=true',
+            'FSSensor=true',
             `HardeningTier1=${tier >= 1 ? 'true' : 'false'}`,
             `HardeningTier2=${tier >= 2 ? 'true' : 'false'}`,
             `HardeningTier3=${tier >= 3 ? 'true' : 'false'}`,
         ].join(',');
+
+        // Enable FS events for both hardening rules and detailed process tree.
+        env.CIMON_APPLY_FS_EVENTS = true;
 
         // Append to existing feature gates rather than overwriting.
         if (env.CIMON_FEATURE_GATES) {
