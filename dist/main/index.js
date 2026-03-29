@@ -27691,7 +27691,7 @@ async function run(config) {
         CIMON_CLIENT_ID: config.cimon.clientId,
         CIMON_SECRET: config.cimon.secret,
         CIMON_URL: config.cimon.url,
-        CIMON_FEATURE_GATES: config.cimon.featureGates,
+        CIMON_FEATURE_GATES: (config.cimon.featureGates || []).filter(Boolean).join(','),
         GITHUB_TOKEN: config.github.token,
         CIMON_LOG_LEVEL: config.cimon.logLevel,
         CIMON_ENABLE_GITHUB_NETWORK_POLICY: true,
