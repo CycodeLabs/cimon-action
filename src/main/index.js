@@ -60,47 +60,50 @@ async function downloadV1Binary(version) {
 
     // Step 1: Verify cosign signature on checksums.txt.
     // This proves the checksums were signed by Cycode's private key.
+    // Verify cosign signature on checksums.txt.
+    // This proves the checksums were signed by Cycode's private key.
     // Even if an attacker compromises the GitHub release, they can't
     // forge a valid signature without the private key.
-    let cosignVerified = false;
-    try {
-        const sigResponse = await httpClient.get(`${baseUrl}/checksums.txt.sig`);
-        if (sigResponse.message.statusCode !== 200) {
-            throw new Error(`Signature file not found (HTTP ${sigResponse.message.statusCode})`);
-        }
-        const sigChunks = [];
-        await new Promise((resolve, reject) => {
-            sigResponse.message.on('data', (chunk) => sigChunks.push(chunk));
-            sigResponse.message.on('end', resolve);
-            sigResponse.message.on('error', reject);
-        });
-        fs.writeFileSync(checksumSigPath, Buffer.concat(sigChunks));
-
-        const cosignPath = await installCosign();
-
-        // The public key is embedded in the action repo — not downloaded
-        // from the release (which an attacker could replace).
-        const pubKeyPath = new URL('../cosign.pub', import.meta.url).pathname;
-
-        const verifyResult = await exec.exec(cosignPath, [
-            'verify-blob',
-            '--key', pubKeyPath,
-            '--signature', checksumSigPath,
-            '--insecure-ignore-tlog',
-            checksumPath,
-        ], { ignoreReturnCode: true, silent: true });
-
-        if (verifyResult === 0) {
-            core.info('Cosign signature verified — checksums are authentic');
-            cosignVerified = true;
-        } else {
-            core.warning('Cosign signature verification FAILED — checksums may be tampered');
-        }
-    } catch (e) {
-        // Signature file may not exist for older releases.
-        // Fall back to SHA256-only verification.
-        core.info('Cosign signature not available for this release, using SHA256 only');
+    // MANDATORY: if signature is missing or invalid, abort.
+    core.info('Downloading cosign signature...');
+    const sigResponse = await httpClient.get(`${baseUrl}/checksums.txt.sig`);
+    if (sigResponse.message.statusCode !== 200) {
+        throw new Error(
+            `Cosign signature file not found for ${version} (HTTP ${sigResponse.message.statusCode}).\n` +
+            `All v1.x releases must be signed. This may indicate a compromised or incomplete release.`
+        );
     }
+    const sigChunks = [];
+    await new Promise((resolve, reject) => {
+        sigResponse.message.on('data', (chunk) => sigChunks.push(chunk));
+        sigResponse.message.on('end', resolve);
+        sigResponse.message.on('error', reject);
+    });
+    fs.writeFileSync(checksumSigPath, Buffer.concat(sigChunks));
+
+    const cosignPath = await installCosign();
+
+    // The public key is embedded in the action repo — not downloaded
+    // from the release (which an attacker could replace).
+    const pubKeyPath = new URL('../cosign.pub', import.meta.url).pathname;
+
+    core.info('Verifying cosign signature...');
+    const verifyResult = await exec.exec(cosignPath, [
+        'verify-blob',
+        '--key', pubKeyPath,
+        '--signature', checksumSigPath,
+        '--insecure-ignore-tlog',
+        checksumPath,
+    ], { ignoreReturnCode: true, silent: true });
+
+    if (verifyResult !== 0) {
+        throw new Error(
+            `Cosign signature verification FAILED for ${version}!\n` +
+            `The checksums file was not signed by Cycode's key.\n` +
+            `This may indicate a compromised release. Aborting.`
+        );
+    }
+    core.info('Cosign signature verified — checksums are authentic');
 
     // Step 2: Verify SHA256 checksum of the binary.
     core.info('Verifying SHA256 checksum...');
@@ -127,8 +130,7 @@ async function downloadV1Binary(version) {
         );
     }
 
-    const verifyLevel = cosignVerified ? 'cosign + SHA256' : 'SHA256 only';
-    core.info(`Binary verified (${verifyLevel}): ${actualHash.substring(0, 16)}...`);
+    core.info(`Binary verified (cosign + SHA256): ${actualHash.substring(0, 16)}...`);
 
     const extractDir = '/tmp/cimon-v1';
     fs.mkdirSync(extractDir, { recursive: true });
