@@ -27,11 +27,41 @@ async function getLatestV1Version() {
 
 async function downloadV1Binary(version) {
     const arch = process.arch === 'arm64' ? 'arm64' : 'x86_64';
-    const url = `${CIMON_RELEASES_GITHUB}/download/${version}/cimon_linux_${arch}.tar.gz`;
+    const baseUrl = `${CIMON_RELEASES_GITHUB}/download/${version}`;
+    const tarName = `cimon_linux_${arch}.tar.gz`;
     const tarPath = '/tmp/cimon-v1.tar.gz';
+    const checksumPath = '/tmp/cimon-v1-checksums.txt';
 
     core.info(`Downloading cimon ${version} for ${arch}...`);
-    await downloadToFile(url, tarPath);
+    await downloadToFile(`${baseUrl}/${tarName}`, tarPath);
+    await downloadToFile(`${baseUrl}/checksums.txt`, checksumPath);
+
+    // Verify SHA256 checksum before extracting.
+    // This ensures the binary wasn't tampered with in transit.
+    core.info('Verifying SHA256 checksum...');
+    const checksumContent = fs.readFileSync(checksumPath, 'utf8');
+    const expectedHash = checksumContent
+        .split('\n')
+        .filter(line => line.includes(tarName))
+        .map(line => line.split(/\s+/)[0])[0];
+
+    if (!expectedHash) {
+        throw new Error(`Checksum not found for ${tarName} in checksums.txt`);
+    }
+
+    const { createHash } = await import('crypto');
+    const fileBuffer = fs.readFileSync(tarPath);
+    const actualHash = createHash('sha256').update(fileBuffer).digest('hex');
+
+    if (actualHash !== expectedHash) {
+        throw new Error(
+            `SHA256 checksum mismatch for ${tarName}!\n` +
+            `  Expected: ${expectedHash}\n` +
+            `  Got:      ${actualHash}\n` +
+            `  This may indicate a compromised release. Aborting.`
+        );
+    }
+    core.info(`Checksum verified: ${actualHash.substring(0, 16)}...`);
 
     const extractDir = '/tmp/cimon-v1';
     fs.mkdirSync(extractDir, { recursive: true });
