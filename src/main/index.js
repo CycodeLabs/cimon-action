@@ -13,13 +13,20 @@ const CIMON_EXECUTABLE_PATH = '/tmp/cimon/cimon';
 const CIMON_RELEASES_GITHUB = 'https://github.com/CycodeLabs/cimon-releases/releases';
 
 async function getLatestV1Version() {
-    const response = await httpClient.getJson(
-        'https://api.github.com/repos/CycodeLabs/cimon-releases/releases'
-    );
-    const releases = response.result;
-    for (const release of releases) {
-        if (release.tag_name && release.tag_name.startsWith('v1.') && !release.draft) {
-            return release.tag_name;
+    // Paginate through releases to find the latest v1.x tag.
+    // GitHub returns 30 per page by default; use 100 and check up to 5 pages.
+    const baseUrl = 'https://api.github.com/repos/CycodeLabs/cimon-releases/releases';
+    for (let page = 1; page <= 5; page++) {
+        const response = await httpClient.getJson(
+            `${baseUrl}?per_page=100&page=${page}`
+        );
+        const releases = response.result;
+        if (!releases || releases.length === 0) break;
+
+        for (const release of releases) {
+            if (release.tag_name && release.tag_name.startsWith('v1.') && !release.draft) {
+                return release.tag_name;
+            }
         }
     }
     throw new Error('No v1.x release found on cimon-releases');
@@ -33,7 +40,7 @@ async function installCosign() {
 
     if (!fs.existsSync(cosignPath)) {
         core.info(`Installing cosign ${cosignVersion}...`);
-        await downloadToFile(cosignUrl, cosignPath);
+        await downloadBinaryToFile(cosignUrl, cosignPath);
         fs.chmodSync(cosignPath, 0o755);
     }
     return cosignPath;
@@ -48,7 +55,7 @@ async function downloadV1Binary(version) {
     const checksumSigPath = '/tmp/cimon-v1-checksums.txt.sig';
 
     core.info(`Downloading cimon ${version} for ${arch}...`);
-    await downloadToFile(`${baseUrl}/${tarName}`, tarPath);
+    await downloadBinaryToFile(`${baseUrl}/${tarName}`, tarPath);
     await downloadToFile(`${baseUrl}/checksums.txt`, checksumPath);
 
     // Step 1: Verify cosign signature on checksums.txt.
@@ -57,7 +64,7 @@ async function downloadV1Binary(version) {
     // forge a valid signature without the private key.
     let cosignVerified = false;
     try {
-        await downloadToFile(`${baseUrl}/checksums.txt.sig`, checksumSigPath);
+        await downloadBinaryToFile(`${baseUrl}/checksums.txt.sig`, checksumSigPath);
 
         const cosignPath = await installCosign();
 
@@ -127,6 +134,20 @@ async function downloadToFile(url, filePath) {
     const response = await httpClient.get(url);
     const responseBody = await response.readBody();
     fs.writeFileSync(filePath, responseBody);
+}
+
+// Binary-safe download for tarballs and other non-text files.
+// readBody() returns a string which corrupts binary data via UTF-8 re-encoding.
+async function downloadBinaryToFile(url, filePath) {
+    const response = await httpClient.get(url);
+    const message = response.message;
+    const chunks = [];
+    await new Promise((resolve, reject) => {
+        message.on('data', (chunk) => chunks.push(chunk));
+        message.on('end', resolve);
+        message.on('error', reject);
+    });
+    fs.writeFileSync(filePath, Buffer.concat(chunks));
 }
 
 function getActionConfig() {
