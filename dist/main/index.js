@@ -27789,6 +27789,7 @@ try {
 } catch (error) {
     const failOnError = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('fail-on-error');
     const log = error.message;
+    _actions_core__WEBPACK_IMPORTED_MODULE_0__.error(`Cimon action error: ${log}`);
     if (failOnError) {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.setFailed(log);
     }

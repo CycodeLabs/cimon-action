@@ -350,6 +350,7 @@ try {
 } catch (error) {
     const failOnError = core.getBooleanInput('fail-on-error');
     const log = error.message;
+    core.error(`Cimon action error: ${log}`);
     if (failOnError) {
         core.setFailed(log);
     }
