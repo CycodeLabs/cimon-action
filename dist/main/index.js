@@ -27687,6 +27687,9 @@ async function run(config) {
         releasePath = CIMON_EXECUTABLE_PATH;
     }
 
+    // Save release path so the post step uses the same binary for stop.
+    _actions_core__WEBPACK_IMPORTED_MODULE_0__.saveState('release-path', releasePath);
+
     const env = {
         ...process.env,
         CIMON_PREVENT: config.cimon.preventionMode,
