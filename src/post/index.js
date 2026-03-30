@@ -55,8 +55,13 @@ async function sudoExists() {
  */
 function getCimonPath() {
     const savedPath = core.getState('release-path');
+    core.info(`Post step: saved release-path = '${savedPath}'`);
     if (savedPath && fs.existsSync(savedPath)) {
+        core.info(`Using saved release path: ${savedPath}`);
         return savedPath;
+    }
+    if (savedPath) {
+        core.warning(`Saved path '${savedPath}' does not exist on disk, falling back`);
     }
     return CIMON_EXECUTABLE_PATH;
 }
