@@ -83,9 +83,18 @@ async function downloadV1Binary(version) {
 
     const cosignPath = await installCosign();
 
-    // The public key is embedded in the action repo — not downloaded
+    // The public key is embedded directly in code — not downloaded
     // from the release (which an attacker could replace).
-    const pubKeyPath = new URL('../cosign.pub', import.meta.url).pathname;
+    // This is Cycode's cosign public key (cosign generate-key-pair).
+    const COSIGN_PUB = [
+        '-----BEGIN PUBLIC KEY-----',
+        'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEm1mmcCICdlB5j78efKNbPK8Q0UeO',
+        'rDH1UNxhD2ibPuzUDV3OzpL8wVtTnWW1jLGMi7fKiZPfP+pB2BpdUPaMSg==',
+        '-----END PUBLIC KEY-----',
+        '',
+    ].join('\n');
+    const pubKeyPath = '/tmp/cimon-cosign-verify.pub';
+    fs.writeFileSync(pubKeyPath, COSIGN_PUB);
 
     core.info('Verifying cosign signature...');
     const verifyResult = await exec.exec(cosignPath, [

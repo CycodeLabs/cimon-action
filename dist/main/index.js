@@ -25599,13 +25599,6 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("util/types")
 
 /***/ }),
 
-/***/ 8892:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-module.exports = __nccwpck_require__.p + "ef370279c07ae9818dbd.js?../cosign.pub";
-
-/***/ }),
-
 /***/ 9491:
 /***/ ((module) => {
 
@@ -27522,9 +27515,18 @@ async function downloadV1Binary(version) {
 
     const cosignPath = await installCosign();
 
-    // The public key is embedded in the action repo — not downloaded
+    // The public key is embedded directly in code — not downloaded
     // from the release (which an attacker could replace).
-    const pubKeyPath = new URL(/* asset import */ __nccwpck_require__(8892), __nccwpck_require__.b).pathname;
+    // This is Cycode's cosign public key (cosign generate-key-pair).
+    const COSIGN_PUB = [
+        '-----BEGIN PUBLIC KEY-----',
+        'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEm1mmcCICdlB5j78efKNbPK8Q0UeO',
+        'rDH1UNxhD2ibPuzUDV3OzpL8wVtTnWW1jLGMi7fKiZPfP+pB2BpdUPaMSg==',
+        '-----END PUBLIC KEY-----',
+        '',
+    ].join('\n');
+    const pubKeyPath = '/tmp/cimon-cosign-verify.pub';
+    fs__WEBPACK_IMPORTED_MODULE_2__.writeFileSync(pubKeyPath, COSIGN_PUB);
 
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Verifying cosign signature...');
     const verifyResult = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(cosignPath, [
@@ -27832,9 +27834,6 @@ __webpack_handle_async_dependencies__();
 /******/ 	return module.exports;
 /******/ }
 /******/ 
-/******/ // expose the modules object (__webpack_modules__)
-/******/ __nccwpck_require__.m = __webpack_modules__;
-/******/ 
 /************************************************************************/
 /******/ /* webpack/runtime/async module */
 /******/ (() => {
@@ -27968,40 +27967,9 @@ __webpack_handle_async_dependencies__();
 /******/ 	};
 /******/ })();
 /******/ 
-/******/ /* webpack/runtime/publicPath */
-/******/ (() => {
-/******/ 	var scriptUrl;
-/******/ 	if (typeof import.meta.url === "string") scriptUrl = import.meta.url
-/******/ 	// When supporting browsers where an automatic publicPath is not supported you must specify an output.publicPath manually via configuration
-/******/ 	// or pass an empty string ("") and set the __webpack_public_path__ variable from your code to use your own logic.
-/******/ 	if (!scriptUrl) throw new Error("Automatic publicPath is not supported in this browser");
-/******/ 	scriptUrl = scriptUrl.replace(/#.*$/, "").replace(/\?.*$/, "").replace(/\/[^\/]+$/, "/");
-/******/ 	__nccwpck_require__.p = scriptUrl;
-/******/ })();
-/******/ 
 /******/ /* webpack/runtime/compat */
 /******/ 
 /******/ if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = new URL('.', import.meta.url).pathname.slice(import.meta.url.match(/^file:\/\/\/\w:/) ? 1 : 0, -1) + "/";
-/******/ 
-/******/ /* webpack/runtime/import chunk loading */
-/******/ (() => {
-/******/ 	__nccwpck_require__.b = new URL("./", import.meta.url);
-/******/ 	
-/******/ 	// object to store loaded and loading chunks
-/******/ 	// undefined = chunk not loaded, null = chunk preloaded/prefetched
-/******/ 	// [resolve, reject, Promise] = chunk loading, 0 = chunk loaded
-/******/ 	var installedChunks = {
-/******/ 		179: 0
-/******/ 	};
-/******/ 	
-/******/ 	// no install chunk
-/******/ 	
-/******/ 	// no chunk on demand loading
-/******/ 	
-/******/ 	// no external install chunk
-/******/ 	
-/******/ 	// no on chunks loaded
-/******/ })();
 /******/ 
 /************************************************************************/
 /******/ 
