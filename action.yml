@@ -79,6 +79,24 @@ inputs:
     description: Path to Cimon release file (Used for debugging)
     required: false
     default: ''
+  hardening:
+    description: |
+      Enable hardening rules engine to detect/prevent CI/CD supply chain attacks
+      (base64-decode-exec, credential theft, typosquatting, etc.).
+      Combine with prevent=true for active blocking.
+    required: false
+    default: 'false'
+  hardening-tier:
+    description: |
+      Maximum hardening tier to enable:
+      1 = critical rules only (Tier 1)
+      2 = critical + high impact (Tier 1+2, default)
+      3 = all rules including defense-in-depth (Tier 1+2+3)
+    required: false
+    default: '2'
+  hardening-disabled-rules:
+    description: Comma-separated list of hardening rule IDs to disable
+    required: false
 
 runs:
   using: node20

@@ -9,12 +9,166 @@ const CIMON_SCRIPT_PATH = '/tmp/install.sh';
 const CIMON_EXECUTABLE_DIR = '/tmp/cimon';
 const CIMON_EXECUTABLE_PATH = '/tmp/cimon/cimon';
 
+// For v1+, download a specific version from GitHub releases instead of S3 latest.
+const CIMON_RELEASES_GITHUB = 'https://github.com/CycodeLabs/cimon-releases/releases';
+
+async function getLatestV1Version() {
+    // Paginate through releases to find the latest v1.x tag.
+    // GitHub returns 30 per page by default; use 100 and check up to 5 pages.
+    const baseUrl = 'https://api.github.com/repos/CycodeLabs/cimon-releases/releases';
+    for (let page = 1; page <= 5; page++) {
+        const response = await httpClient.getJson(
+            `${baseUrl}?per_page=100&page=${page}`
+        );
+        const releases = response.result;
+        if (!releases || releases.length === 0) break;
+
+        for (const release of releases) {
+            if (release.tag_name && release.tag_name.startsWith('v1.') && !release.draft) {
+                return release.tag_name;
+            }
+        }
+    }
+    throw new Error('No v1.x release found on cimon-releases');
+}
+
+async function installCosign() {
+    // Download cosign binary for signature verification.
+    const cosignVersion = 'v2.2.1';
+    const cosignUrl = `https://github.com/sigstore/cosign/releases/download/${cosignVersion}/cosign-linux-amd64`;
+    const cosignPath = '/tmp/cosign';
+
+    if (!fs.existsSync(cosignPath)) {
+        core.info(`Installing cosign ${cosignVersion}...`);
+        await downloadBinaryToFile(cosignUrl, cosignPath);
+        fs.chmodSync(cosignPath, 0o755);
+    }
+    return cosignPath;
+}
+
+async function downloadV1Binary(version) {
+    const arch = process.arch === 'arm64' ? 'arm64' : 'x86_64';
+    const baseUrl = `${CIMON_RELEASES_GITHUB}/download/${version}`;
+    const tarName = `cimon_linux_${arch}.tar.gz`;
+    const tarPath = '/tmp/cimon-v1.tar.gz';
+    const checksumPath = '/tmp/cimon-v1-checksums.txt';
+    const checksumSigPath = '/tmp/cimon-v1-checksums.txt.sig';
+
+    core.info(`Downloading cimon ${version} for ${arch}...`);
+    await downloadBinaryToFile(`${baseUrl}/${tarName}`, tarPath);
+    await downloadToFile(`${baseUrl}/checksums.txt`, checksumPath);
+
+    // Step 1: Verify cosign signature on checksums.txt.
+    // This proves the checksums were signed by Cycode's private key.
+    // Verify cosign signature on checksums.txt.
+    // This proves the checksums were signed by Cycode's private key.
+    // Even if an attacker compromises the GitHub release, they can't
+    // forge a valid signature without the private key.
+    // MANDATORY: if signature is missing or invalid, abort.
+    core.info('Downloading cosign signature...');
+    const sigResponse = await httpClient.get(`${baseUrl}/checksums.txt.sig`);
+    if (sigResponse.message.statusCode !== 200) {
+        throw new Error(
+            `Cosign signature file not found for ${version} (HTTP ${sigResponse.message.statusCode}).\n` +
+            `All v1.x releases must be signed. This may indicate a compromised or incomplete release.`
+        );
+    }
+    const sigChunks = [];
+    await new Promise((resolve, reject) => {
+        sigResponse.message.on('data', (chunk) => sigChunks.push(chunk));
+        sigResponse.message.on('end', resolve);
+        sigResponse.message.on('error', reject);
+    });
+    fs.writeFileSync(checksumSigPath, Buffer.concat(sigChunks));
+
+    const cosignPath = await installCosign();
+
+    // The public key is embedded directly in code — not downloaded
+    // from the release (which an attacker could replace).
+    // This is Cycode's cosign public key (cosign generate-key-pair).
+    const COSIGN_PUB = [
+        '-----BEGIN PUBLIC KEY-----',
+        'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEm1mmcCICdlB5j78efKNbPK8Q0UeO',
+        'rDH1UNxhD2ibPuzUDV3OzpL8wVtTnWW1jLGMi7fKiZPfP+pB2BpdUPaMSg==',
+        '-----END PUBLIC KEY-----',
+        '',
+    ].join('\n');
+    const pubKeyPath = '/tmp/cimon-cosign-verify.pub';
+    fs.writeFileSync(pubKeyPath, COSIGN_PUB);
+
+    core.info('Verifying cosign signature...');
+    const verifyResult = await exec.exec(cosignPath, [
+        'verify-blob',
+        '--key', pubKeyPath,
+        '--signature', checksumSigPath,
+        '--insecure-ignore-tlog',
+        checksumPath,
+    ], { ignoreReturnCode: true, silent: true });
+
+    if (verifyResult !== 0) {
+        throw new Error(
+            `Cosign signature verification FAILED for ${version}!\n` +
+            `The checksums file was not signed by Cycode's key.\n` +
+            `This may indicate a compromised release. Aborting.`
+        );
+    }
+    core.info('Cosign signature verified — checksums are authentic');
+
+    // Step 2: Verify SHA256 checksum of the binary.
+    core.info('Verifying SHA256 checksum...');
+    const checksumContent = fs.readFileSync(checksumPath, 'utf8');
+    const expectedHash = checksumContent
+        .split('\n')
+        .filter(line => line.includes(tarName))
+        .map(line => line.split(/\s+/)[0])[0];
+
+    if (!expectedHash) {
+        throw new Error(`Checksum not found for ${tarName} in checksums.txt`);
+    }
+
+    const { createHash } = await import('crypto');
+    const fileBuffer = fs.readFileSync(tarPath);
+    const actualHash = createHash('sha256').update(fileBuffer).digest('hex');
+
+    if (actualHash !== expectedHash) {
+        throw new Error(
+            `SHA256 checksum mismatch for ${tarName}!\n` +
+            `  Expected: ${expectedHash}\n` +
+            `  Got:      ${actualHash}\n` +
+            `  This may indicate a compromised release. Aborting.`
+        );
+    }
+
+    core.info(`Binary verified (cosign + SHA256): ${actualHash.substring(0, 16)}...`);
+
+    const extractDir = '/tmp/cimon-v1';
+    fs.mkdirSync(extractDir, { recursive: true });
+    await exec.exec('tar', ['-xzf', tarPath, '-C', extractDir]);
+    fs.chmodSync(`${extractDir}/cimon`, 0o755);
+
+    return `${extractDir}/cimon`;
+}
+
 const httpClient = new http.HttpClient('cimon-action');
 
 async function downloadToFile(url, filePath) {
     const response = await httpClient.get(url);
     const responseBody = await response.readBody();
     fs.writeFileSync(filePath, responseBody);
+}
+
+// Binary-safe download for tarballs and other non-text files.
+// readBody() returns a string which corrupts binary data via UTF-8 re-encoding.
+async function downloadBinaryToFile(url, filePath) {
+    const response = await httpClient.get(url);
+    const message = response.message;
+    const chunks = [];
+    await new Promise((resolve, reject) => {
+        message.on('data', (chunk) => chunks.push(chunk));
+        message.on('end', resolve);
+        message.on('error', reject);
+    });
+    fs.writeFileSync(filePath, Buffer.concat(chunks));
 }
 
 function getActionConfig() {
@@ -38,6 +192,9 @@ function getActionConfig() {
             url: core.getInput('url'),
             featureGates: core.getMultilineInput('feature-gates'),
             releasePath: core.getInput('release-path'),
+            hardening: core.getInput('hardening') === 'true',
+            hardeningTier: core.getInput('hardening-tier') || '2',
+            hardeningDisabledRules: core.getInput('hardening-disabled-rules') || '',
         },
         report: {
             processTree: core.getBooleanInput('report-process-tree'),
@@ -72,6 +229,10 @@ async function run(config) {
         }
 
         releasePath = config.cimon.releasePath;
+    } else if (config.cimon.hardening) {
+        // Hardening requires v1.x binary. Auto-download latest v1.x release.
+        const version = await getLatestV1Version();
+        releasePath = await downloadV1Binary(version);
     } else {
         core.info('Running Cimon from latest release path');
 
@@ -96,6 +257,9 @@ async function run(config) {
         releasePath = CIMON_EXECUTABLE_PATH;
     }
 
+    // Save release path so the post step uses the same binary for stop.
+    core.saveState('release-path', releasePath);
+
     const env = {
         ...process.env,
         CIMON_PREVENT: config.cimon.preventionMode,
@@ -112,7 +276,7 @@ async function run(config) {
         CIMON_CLIENT_ID: config.cimon.clientId,
         CIMON_SECRET: config.cimon.secret,
         CIMON_URL: config.cimon.url,
-        CIMON_FEATURE_GATES: config.cimon.featureGates,
+        CIMON_FEATURE_GATES: (config.cimon.featureGates || []).filter(Boolean).join(','),
         GITHUB_TOKEN: config.github.token,
         CIMON_LOG_LEVEL: config.cimon.logLevel,
         CIMON_ENABLE_GITHUB_NETWORK_POLICY: true,
@@ -129,6 +293,35 @@ async function run(config) {
     if (config.cimon.memoryProtection) {
         // Feature flags that required for the memory protection module.
         env.CIMON_FEATURE_GATES = 'FSSensor=1';
+    }
+
+    if (config.cimon.hardening) {
+        // Build hardening feature gates based on tier level.
+        // Also enable FSSensor — required for FS-based hardening rules
+        // (sensitive-reads, proc-mem-read, systemd-install, etc.)
+        const tier = parseInt(config.cimon.hardeningTier) || 2;
+        const hardeningGates = [
+            'Hardening=true',
+            'FSSensor=true',
+            `HardeningTier1=${tier >= 1 ? 'true' : 'false'}`,
+            `HardeningTier2=${tier >= 2 ? 'true' : 'false'}`,
+            `HardeningTier3=${tier >= 3 ? 'true' : 'false'}`,
+        ].join(',');
+
+        // Enable FS events for both hardening rules and detailed process tree.
+        env.CIMON_APPLY_FS_EVENTS = true;
+
+        // Append to existing feature gates rather than overwriting.
+        if (env.CIMON_FEATURE_GATES) {
+            env.CIMON_FEATURE_GATES += ',' + hardeningGates;
+        } else {
+            env.CIMON_FEATURE_GATES = hardeningGates;
+        }
+
+        if (config.cimon.hardeningDisabledRules) {
+            env.CIMON_HARDENING_DISABLED_RULES =
+                config.cimon.hardeningDisabledRules;
+        }
     }
 
     var retval;
@@ -166,6 +359,7 @@ try {
 } catch (error) {
     const failOnError = core.getBooleanInput('fail-on-error');
     const log = error.message;
+    core.error(`Cimon action error: ${log}`);
     if (failOnError) {
         core.setFailed(log);
     }
