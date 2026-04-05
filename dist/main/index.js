@@ -27456,7 +27456,13 @@ async function getLatestV1Version() {
         if (!releases || releases.length === 0) break;
 
         for (const release of releases) {
-            if (release.tag_name && release.tag_name.startsWith('v1.') && !release.draft) {
+            // Match v1.x.y but skip v1.x.y-rc1, v1.x.y-alpha, etc.
+            // Pre-releases on GitHub are fine (our release workflow marks
+            // all v1.x as pre-release to not override v0 latest).
+            if (release.tag_name &&
+                release.tag_name.startsWith('v1.') &&
+                !release.draft &&
+                !release.tag_name.includes('-')) {
                 return release.tag_name;
             }
         }
