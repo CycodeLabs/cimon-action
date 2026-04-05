@@ -25,7 +25,7 @@ Getting started with Cimon is as simple as introducing a single step in the pipe
 We recommend starting Cimon in “Detect Mode” to allow it to learn your environment before applying preventive policies.
 
 ```yaml
-- uses: cycodelabs/cimon-action@v0
+- uses: cycodelabs/cimon-action@v1
 ```
 
 ## 🔨 Usage
@@ -49,6 +49,9 @@ The action supports the following parameters:
 | `log-level`              | `info`                | Log level (Used for debugging)                                                                                                                                                                                                                                                                                                                                            |
 | `feature-gates`          |                       | Set of key=value pairs that describe Cimon features                                                                                                                                                                                                                                                                                                                       |
 | `fail-on-error`          | `false`               | Fail the CI if Cimon encountered an error                                                                                                                                                                                                                                                                                                                                 |
+| `hardening`              | `false`               | Enable hardening rules engine to detect/prevent CI/CD supply chain attacks                                                                                                                                                                                                                                                                                                |
+| `hardening-tier`         | `2`                   | Maximum hardening tier: 1 = critical only, 2 = critical + high (default), 3 = all rules                                                                                                                                                                                                                                                                                  |
+| `hardening-disabled-rules` |                     | Comma-separated list of hardening rule IDs to disable                                                                                                                                                                                                                                                                                                                     |
 
 ## ⚙️ Scenarios
 
@@ -56,14 +59,14 @@ The action supports the following parameters:
 
 ```yaml
 steps:
-    - uses: cycodelabs/cimon-action@v0
+    - uses: cycodelabs/cimon-action@v1
 ```
 
 ### Running Cimon on prevent mode
 
 ```yaml
 steps:
-    - uses: cycodelabs/cimon-action@v0
+    - uses: cycodelabs/cimon-action@v1
       with:
           prevent: true
           allowed-hosts: >
@@ -74,10 +77,22 @@ steps:
 
 ```yaml
 steps:
-    - uses: cycodelabs/cimon-action@v0
+    - uses: cycodelabs/cimon-action@v1
       with:
           report-process-tree: true
           apply-fs-events: true
+```
+
+### Running Cimon with hardening (supply chain attack detection)
+
+```yaml
+steps:
+    - uses: cycodelabs/cimon-action@v1
+      with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
+          prevent: true
+          hardening: true
 ```
 
 ### Running Cimon with enhanced Cycode capabiltiies
@@ -86,7 +101,7 @@ You can read more about it [here](https://docs.cimon.build/#cimon-with-cycode).
 
 ```yaml
 steps:
-    - uses: cycodelabs/cimon-action@v0
+    - uses: cycodelabs/cimon-action@v1
       with:
           client-id: ${{ secrets.CIMON_CLIENT_ID }}
           secret: ${{ secrets.CIMON_SECRET }}
