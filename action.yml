@@ -81,6 +81,6 @@ inputs:
     default: ''
 
 runs:
-  using: node20
+  using: node24
   main: 'dist/main/index.js'
   post: 'dist/post/index.js'
