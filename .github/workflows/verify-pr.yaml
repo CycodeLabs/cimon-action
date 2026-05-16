@@ -16,6 +16,48 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  verify-attest-windows:
+    # Validates the cross-platform attestation path on Windows. Uses the
+    # same `./attest` action the customer would use on a GHES self-hosted
+    # Windows runner. Keyed signing path (offline, data-residency safe).
+    #
+    # As of #118, the Windows install path resolves the latest tag from
+    # cycodelabs/cimon-releases and downloads cimon_windows_x86_64.zip
+    # directly from the GitHub release — no S3 install.ps1 dependency,
+    # so this job is end-to-end runnable.
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
+
+      - name: Build sample Windows artifact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Set-Content -Path dist/sample.exe -Value "fake-windows-binary-$(Get-Date -Format o)"
+
+      - name: Generate ephemeral signing key
+        shell: pwsh
+        run: |
+          & "C:\Program Files\Git\usr\bin\openssl.exe" genrsa -out private-key.pem 3072
+
+      - name: Cimon Attest (Windows, keyed)
+        uses: ./attest
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret:    ${{ secrets.CIMON_SECRET }}
+          subjects:  dist\sample.exe
+          sign-key:  private-key.pem
+          report-job-summary: true
+          report-artifact:    true
+          fail-on-error:      true
+
+      - name: Show provenance
+        shell: pwsh
+        run: Get-Content provenance.intoto.jsonl
+
   verify:
     runs-on: ubuntu-22.04
     steps:

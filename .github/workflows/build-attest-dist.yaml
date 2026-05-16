@@ -1,0 +1,91 @@
+name: Rebuild attest dist
+
+# Rebuilds attest/dist/index.js when attest/index.js changes. The bundled
+# dist file is what the action runtime executes; both the source and the
+# bundle must be committed.
+on:
+  pull_request:
+    paths:
+      - 'attest/index.js'
+      - 'attest/package.json'
+      - 'attest/package-lock.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  rebuild-dist:
+    runs-on: ubuntu-22.04
+    steps:
+      # Resolve the PR head explicitly. github.head_ref is just the
+      # branch name; without setting `repository`, actions/checkout
+      # would look for that branch in the base repo, which doesn't
+      # have it when the PR comes from a fork — the job would fail
+      # before the rebuild can run. We pin to the head SHA so a force
+      # push between trigger and checkout doesn't race us, and point
+      # `repository` at the head's repo so forks resolve correctly.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install deps + rebuild dist
+        working-directory: attest
+        run: |
+          # SECURITY: --ignore-scripts disables npm lifecycle hooks
+          # (preinstall / postinstall / prepare). Without this, a PR
+          # that adds a malicious dependency could execute arbitrary
+          # code in CI under contents:write permission. The ncc bundler
+          # itself doesn't need lifecycle scripts to run.
+          npm ci --ignore-scripts
+          npm run dist/index.js
+
+      - name: Verify or auto-commit refreshed dist
+        if: github.event_name == 'pull_request'
+        env:
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          # SECURITY: only act if the rebuild produced exactly one
+          # changed file — attest/dist/index.js. Anything else (a new
+          # node_modules entry leaking in, a sneakily-modified workflow
+          # file, etc.) means the PR did something the rebuild step
+          # shouldn't be vouching for, so fail loudly instead of
+          # auto-committing it under github-actions[bot] identity.
+          changed=$(git status --porcelain | awk '{print $2}' | sort)
+          expected="attest/dist/index.js"
+
+          if [ -z "$changed" ]; then
+            echo "dist already up to date"
+            exit 0
+          fi
+
+          if [ "$changed" != "$expected" ]; then
+            echo "::error::Rebuild produced unexpected changes; refusing to act:"
+            echo "$changed"
+            exit 1
+          fi
+
+          # Fork PRs: the base-repo GITHUB_TOKEN is read-only here and
+          # can't push to the fork's branch anyway. Fail with clear
+          # instructions instead of attempting a push that will 403.
+          if [ "$PR_HEAD_REPO" != "$BASE_REPO" ]; then
+            echo "::error::attest/dist/index.js is out of sync with attest/index.js."
+            echo "::error::This PR is from a fork, so the rebuild can't auto-commit."
+            echo "::error::Please run locally and push:"
+            echo "::error::  cd attest && npm ci --ignore-scripts && npm run dist/index.js"
+            echo "::error::  git add attest/dist/index.js && git commit -m 'rebuild dist'"
+            exit 1
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add attest/dist/index.js
+          git commit -m "chore(attest): rebuild dist/index.js"
+          git push
