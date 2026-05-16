@@ -16,6 +16,10 @@
     "@actions/artifact": "^2.2.1",
     "@actions/core": "^1.11.1",
     "@actions/exec": "^1.1.1",
-    "@vercel/ncc": "^0.34.0"
+    "@actions/http-client": "^2.2.3",
+    "@actions/tool-cache": "^2.0.2"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.4"
   }
 }

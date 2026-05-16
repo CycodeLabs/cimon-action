@@ -1,15 +1,25 @@
 import core from '@actions/core';
 import exec from '@actions/exec';
+import tc from '@actions/tool-cache';
 import { DefaultArtifactClient } from '@actions/artifact';
 import * as http from '@actions/http-client';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 
+const IS_WINDOWS = process.platform === 'win32';
+
+// Linux: bootstrap from the cimon-releases install.sh, same as before.
 const CIMON_SCRIPT_DOWNLOAD_URL =
     'https://cimon-releases.s3.amazonaws.com/install.sh';
 const CIMON_SCRIPT_PATH = '/tmp/install.sh';
 const CIMON_EXECUTABLE_DIR = '/tmp/cimon';
 const CIMON_EXECUTABLE_PATH = '/tmp/cimon/cimon';
+
+// Windows: install.ps1 is not yet published to S3, so we fetch the
+// platform-specific zip directly from the cimon-releases GitHub release.
+const CIMON_RELEASES_API =
+    'https://api.github.com/repos/cycodelabs/cimon-releases/releases/latest';
 
 const httpClient = new http.HttpClient('cimon-action');
 
@@ -17,6 +27,72 @@ async function downloadToFile(url, filePath) {
     const response = await httpClient.get(url);
     const responseBody = await response.readBody();
     fs.writeFileSync(filePath, responseBody);
+}
+
+// installCimonWindows fetches the cross-platform cimon.exe attest binary
+// from the latest cimon-releases GitHub release and returns the path to
+// the extracted executable. The hardening agent does not exist on Windows,
+// so this binary only exposes the `attest` and `generate-key-pair`
+// subcommands — sufficient for this action's purposes.
+//
+// `githubToken` is the action's github-token input (defaults to
+// ${{ github.token }}). Without it, the latest-release lookup uses the
+// unauthenticated REST limit (60 req/IP/hour) which busy self-hosted
+// fleets behind a shared egress IP can exhaust — leading to 403/429s
+// before any download runs. The same token is passed to tc.downloadTool
+// for the asset download; that URL eventually 302s to objects-origin
+// which ignores Authorization, but using it on the api.github.com side
+// is what matters.
+async function installCimonWindows(githubToken) {
+    const tmpDir = process.env.RUNNER_TEMP || os.tmpdir();
+    const installDir = path.join(tmpDir, 'cimon');
+    const exePath = path.join(installDir, 'cimon.exe');
+
+    if (fs.existsSync(exePath)) {
+        return exePath;
+    }
+
+    const authHeaders = {};
+    if (githubToken) {
+        authHeaders['Authorization'] = `Bearer ${githubToken}`;
+        authHeaders['X-GitHub-Api-Version'] = '2022-11-28';
+    } else {
+        core.warning(
+            'No github-token provided; falling back to unauthenticated ' +
+                'GitHub API (60 req/IP/hour). On busy self-hosted runners ' +
+                'this can rate-limit before cimon.exe is downloaded.'
+        );
+    }
+
+    // Resolve the latest tag. Pinning by tag in customer pipelines is
+    // recommended, but this action mirrors the Linux flow (install.sh
+    // installs latest) for parity.
+    const latest = await httpClient.getJson(CIMON_RELEASES_API, authHeaders);
+    const tag = latest.result && latest.result.tag_name;
+    if (!tag) {
+        throw new Error(
+            'Failed resolving latest cimon-releases tag (no tag_name in API response)'
+        );
+    }
+
+    const zipUrl =
+        `https://github.com/cycodelabs/cimon-releases/releases/download/` +
+        `${tag}/cimon_windows_x86_64.zip`;
+
+    core.info(`Downloading cimon ${tag} for Windows from ${zipUrl}`);
+    const zipPath = await tc.downloadTool(
+        zipUrl,
+        undefined,
+        githubToken ? `Bearer ${githubToken}` : undefined
+    );
+    await tc.extractZip(zipPath, installDir);
+
+    if (!fs.existsSync(exePath)) {
+        throw new Error(
+            `cimon.exe not found after extracting ${zipUrl} into ${installDir}`
+        );
+    }
+    return exePath;
 }
 
 function getActionConfig() {
@@ -69,6 +145,11 @@ async function run(config) {
         }
 
         releasePath = config.cimon.releasePath;
+    } else if (IS_WINDOWS) {
+        // Windows: bootstrap via the cimon_windows_x86_64.zip release asset.
+        // No hardening agent on Windows; this is the attest-only binary.
+        core.info('Running Cimon Attest from latest release (Windows)');
+        releasePath = await installCimonWindows(config.github.token);
     } else {
         core.info('Running Cimon from latest release path');
 
