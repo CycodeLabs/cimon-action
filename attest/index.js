@@ -9,12 +9,28 @@ import os from 'os';
 
 const IS_WINDOWS = process.platform === 'win32';
 
-// Linux: bootstrap from the cimon-releases install.sh, same as before.
+// SECURITY: scope every install under a unique per-job subdirectory so a
+// malicious previous step / job on a self-hosted runner cannot plant a
+// pre-existing cimon binary or install script that we'd silently reuse.
+// GHES self-hosted runners commonly persist $RUNNER_TEMP between jobs;
+// public hosted runners give us a fresh VM, but we apply the same
+// hardening unconditionally.
+const CIMON_TMP_BASE = process.env.RUNNER_TEMP || os.tmpdir();
+const CIMON_RUN_KEY = [
+    process.env.GITHUB_RUN_ID || 'local',
+    process.env.GITHUB_RUN_ATTEMPT || '0',
+    process.env.GITHUB_JOB || 'job',
+]
+    .map((s) => String(s).replace(/[^A-Za-z0-9._-]/g, '_'))
+    .join('-');
+const CIMON_TMP_DIR = path.join(CIMON_TMP_BASE, `cimon-${CIMON_RUN_KEY}`);
+
+// Linux: bootstrap from the cimon-releases install.sh.
 const CIMON_SCRIPT_DOWNLOAD_URL =
     'https://cimon-releases.s3.amazonaws.com/install.sh';
-const CIMON_SCRIPT_PATH = '/tmp/install.sh';
-const CIMON_EXECUTABLE_DIR = '/tmp/cimon';
-const CIMON_EXECUTABLE_PATH = '/tmp/cimon/cimon';
+const CIMON_SCRIPT_PATH = path.join(CIMON_TMP_DIR, 'install.sh');
+const CIMON_EXECUTABLE_DIR = path.join(CIMON_TMP_DIR, 'cimon');
+const CIMON_EXECUTABLE_PATH = path.join(CIMON_EXECUTABLE_DIR, 'cimon');
 
 // Windows: install.ps1 is not yet published to S3, so we fetch the
 // platform-specific zip directly from the cimon-releases GitHub release.
@@ -44,13 +60,17 @@ async function downloadToFile(url, filePath) {
 // which ignores Authorization, but using it on the api.github.com side
 // is what matters.
 async function installCimonWindows(githubToken) {
-    const tmpDir = process.env.RUNNER_TEMP || os.tmpdir();
-    const installDir = path.join(tmpDir, 'cimon');
+    const installDir = CIMON_EXECUTABLE_DIR;
     const exePath = path.join(installDir, 'cimon.exe');
 
-    if (fs.existsSync(exePath)) {
-        return exePath;
+    // SECURITY: wipe any stale state before install, even within the
+    // per-job subdir computed at module load. This defends against a
+    // malicious step earlier in this same job planting a pre-built
+    // cimon.exe at our expected path.
+    if (fs.existsSync(installDir)) {
+        fs.rmSync(installDir, { recursive: true, force: true });
     }
+    fs.mkdirSync(installDir, { recursive: true });
 
     const authHeaders = {};
     if (githubToken) {
@@ -153,11 +173,18 @@ async function run(config) {
     } else {
         core.info('Running Cimon from latest release path');
 
-        if (!fs.existsSync(CIMON_SCRIPT_PATH)) {
-            await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
+        // SECURITY: wipe any stale state under the per-job subdir before
+        // install, then always re-download the install script. Defends
+        // against a malicious earlier step in this job planting an
+        // install script or pre-built cimon binary at our expected paths.
+        if (fs.existsSync(CIMON_TMP_DIR)) {
+            fs.rmSync(CIMON_TMP_DIR, { recursive: true, force: true });
         }
+        fs.mkdirSync(CIMON_TMP_DIR, { recursive: true });
 
-        if (!fs.existsSync(CIMON_EXECUTABLE_DIR)) {
+        await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
+
+        {
             let params = [CIMON_SCRIPT_PATH, '-b', CIMON_EXECUTABLE_DIR];
             if (
                 config.cimon.logLevel == 'debug' ||

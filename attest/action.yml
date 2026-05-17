@@ -1,5 +1,5 @@
-name: Cimon by Cycode
-description: Runtime Security Solution for your CI/CD Pipeline
+name: Cimon by Cycode (Attest)
+description: Generate, sign, and verify SLSA build provenance attestations. Supports Linux, Windows, and macOS runners (including GitHub Enterprise Server).
 branding:
   icon: shield
   color: green
@@ -87,5 +87,5 @@ inputs:
     default: 'false'
 
 runs:
-  using: node24
+  using: node20
   main: 'dist/index.js'
