@@ -86,6 +86,14 @@ inputs:
     required: false
     default: 'false'
 
+outputs:
+  cimon-path:
+    description: |
+      Absolute path to the installed cimon (or cimon.exe) binary used by
+      this action invocation. Downstream steps in the same job can also
+      reach the binary via the CIMON_PATH env var, or call `cimon` /
+      `cimon.exe` directly since the action adds the install dir to PATH.
+
 runs:
   using: node20
   main: 'dist/index.js'
