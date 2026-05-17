@@ -201,6 +201,18 @@ async function run(config) {
         releasePath = CIMON_EXECUTABLE_PATH;
     }
 
+    // Expose the installed binary location to downstream workflow steps so
+    // they don't have to reconstruct the per-job tmpdir layout. Three
+    // surfaces, each for a different consumption pattern:
+    //   - PATH: a later `cimon.exe attest verify ...` step just works.
+    //   - CIMON_PATH env var: an absolute path for callers that bypass PATH
+    //     (e.g. self-hosted runners with locked-down PATH lookup).
+    //   - step output `cimon-path`: chains cleanly into another job via
+    //     ${{ steps.<id>.outputs.cimon-path }}.
+    core.addPath(path.dirname(releasePath));
+    core.exportVariable('CIMON_PATH', releasePath);
+    core.setOutput('cimon-path', releasePath);
+
     if (config.attest.imageRef !== '') {
         core.warning(
             'image-ref parameter is deprecated and will be removed in future versions. Please use subjects parameter instead.'
