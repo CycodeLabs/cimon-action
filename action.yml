@@ -97,6 +97,16 @@ inputs:
   hardening-disabled-rules:
     description: Comma-separated list of hardening rule IDs to disable
     required: false
+  fail-on-detected-risk:
+    description: |
+      When true (the default in prevent mode), fail the step if the cimon agent
+      reported a detected risk on shutdown — including cases where the rule
+      fired but the SIGKILL did not land in time (short-lived processes). This
+      ensures the workflow surface reflects what cimon prevented, instead of
+      relying solely on the offending process exiting non-zero.
+      Has no effect in detect mode (prevent=false).
+    required: false
+    default: 'true'
 
 runs:
   using: node24

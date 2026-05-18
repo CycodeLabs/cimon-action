@@ -140,6 +140,46 @@ async function run(config) {
     if (retval !== 0) {
         throw new Error(`Failed stopping Cimon process: ${retval}`);
     }
+
+    // If the agent reported a detected risk in prevent mode, surface it as
+    // a step failure. The offending process may have already exited
+    // non-zero (in which case the workflow is already red), but a
+    // sufficiently short-lived process can complete before the kill lands,
+    // leaving the workflow green even though the rule fired. This check
+    // closes that gap so the workflow always reflects what cimon prevented.
+    const failOnDetectedRisk = core.getBooleanInput('fail-on-detected-risk');
+    const preventMode = core.getBooleanInput('prevent');
+    if (failOnDetectedRisk && preventMode) {
+        const risk = parseDetectedRisks(stopOutput);
+        if (risk && risk !== 'NoRisk') {
+            throw new Error(
+                `Cimon detected a risk in prevent mode (${risk}). See the ` +
+                `cimon log output and the job summary for the specific rule ` +
+                `and evidence. Set fail-on-detected-risk: false to disable ` +
+                `this check.`
+            );
+        }
+    }
+}
+
+/**
+ * Extract the latest `detectedRisks` value from the cimon agent's
+ * structured-JSON stop output. Returns null if not present.
+ *
+ * The agent emits one log line near shutdown shaped like:
+ *   {"level":"info",...,"detectedRisks":"PreventedRisk","message":"Terminating execution"}
+ *
+ * In rare cases multiple such lines appear (e.g. multiple executions);
+ * we take the last one so the most-recent state wins.
+ */
+function parseDetectedRisks(text) {
+    const re = /"detectedRisks"\s*:\s*"([^"]+)"/g;
+    let match;
+    let last = null;
+    while ((match = re.exec(text)) !== null) {
+        last = match[1];
+    }
+    return last;
 }
 
 /**
