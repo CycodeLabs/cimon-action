@@ -142,6 +142,10 @@ function getActionConfig() {
             ),
             provenanceOutput: core.getInput('provenance-output'),
             signedProvenanceOutput: core.getInput('signed-provenance-output'),
+            sourcePath: core.getInput('source-path'),
+            skipSourceTreeCheck: core.getBooleanInput(
+                'skip-source-tree-check'
+            ),
         },
         report: {
             reportJobSummary: core.getBooleanInput('report-job-summary'),
@@ -229,6 +233,10 @@ async function run(config) {
     if (config.attest.signedProvenanceOutput !== '')
         args.push('--output-signed-prov', config.attest.signedProvenanceOutput);
     if (config.attest.signKey !== '') args.push('--key', config.attest.signKey);
+    if (config.attest.sourcePath !== '')
+        args.push('--source-path', config.attest.sourcePath);
+    if (config.attest.skipSourceTreeCheck)
+        args.push('--skip-source-tree-check');
     if (config.cimon.clientId !== '')
         args.push('--client-id', config.cimon.clientId);
     if (config.cimon.secret !== '') args.push('--secret', config.cimon.secret);
