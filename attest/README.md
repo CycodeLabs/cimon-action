@@ -60,6 +60,8 @@ See the inputs section below for the full list.
 | Name | Description | Default |
 |---|---|---|
 | `subjects` | Whitespace-separated list of artifact paths or base64 subjects | — |
+| `source-path` | Path to the source checkout recorded in the attestation. Unset means automatic discovery (subject paths, run-id directory, workspace). Requires cimon v1.0.24 or later | — |
+| `skip-source-tree-check` | Skip verifying the source tree matches the recorded commit | `false` |
 | `sign-key` | Path to a private ECDSA/RSA/ED25519 PEM key | — |
 | `keyless` | Use keyless (Sigstore) signing | `false` |
 | `tlog-upload` | Upload signature to Rekor transparency log | `true` |
