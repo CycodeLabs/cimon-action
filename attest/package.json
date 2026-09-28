@@ -16,7 +16,7 @@
     "@actions/artifact": "^2.2.1",
     "@actions/core": "^1.11.1",
     "@actions/exec": "^1.1.1",
-    "@actions/http-client": "^2.2.3",
+    "@actions/http-client": "^4.0.1",
     "@actions/tool-cache": "^2.0.2"
   },
   "devDependencies": {
