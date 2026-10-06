@@ -47,13 +47,22 @@ If your environment cannot submit to the public Sigstore transparency
 log (e.g. customers in the USA / EU with data-residency requirements),
 use one of:
 
-- **KMS signing**: `--kms vault://<key-id>` (HashiCorp Vault transit) or
-  `--kms awskms://<arn>` (AWS KMS) — signature stays in your control.
+- **KMS signing**: `--kms vault://<key-id>` (HashiCorp Vault transit).
+  The signature stays in your control. Vault transit is the only KMS
+  backend implemented today.
 - **Keyed signing with checked-in private key**: `sign-key: private-key.pem`.
 - **Private Sigstore**: deploy your own Fulcio + Rekor and pass
   `fulcio-server-url` + `rekor-server-url`.
 
 See the inputs section below for the full list.
+
+> **RFC 3161 timestamping is not available with keyed or KMS signing.**
+> `include-timestamp` and `timestamp-server-url` are forwarded to the
+> CLI only when `keyless: true`, and the CLI itself applies timestamping
+> only in keyless mode. A signature produced with `sign-key` or a KMS
+> provider carries no timestamp, so it has no time anchor proving it was
+> made before the key was rotated or compromised. This is a known gap
+> and we intend to close it.
 
 ## Inputs
 
@@ -64,11 +73,12 @@ See the inputs section below for the full list.
 | `skip-source-tree-check` | Skip verifying the source tree matches the recorded commit | `false` |
 | `sign-key` | Path to a private ECDSA/RSA/ED25519 PEM key | — |
 | `keyless` | Use keyless (Sigstore) signing | `false` |
-| `tlog-upload` | Upload signature to Rekor transparency log | `true` |
-| `fulcio-server-url` | Fulcio server URL | `https://fulcio.sigstore.dev` |
-| `rekor-server-url` | Rekor server URL | `https://rekor.sigstore.dev` |
-| `timestamp-server-url` | RFC3161 timestamp server URL | — |
-| `allow-submit-data-to-public-sigstore` | Required when using public Sigstore | `false` |
+| `tlog-upload` | **Keyless only.** Upload signature to Rekor transparency log | `true` |
+| `include-timestamp` | **Keyless only.** Request an RFC 3161 timestamp and embed it in the signature | `false` |
+| `fulcio-server-url` | **Keyless only.** Fulcio server URL | `https://fulcio.sigstore.dev` |
+| `rekor-server-url` | **Keyless only.** Rekor server URL | `https://rekor.sigstore.dev` |
+| `timestamp-server-url` | **Keyless only.** RFC3161 timestamp server URL. Not forwarded to the CLI unless `keyless: true` | — |
+| `allow-submit-data-to-public-sigstore` | **Keyless only.** Required when using public Sigstore | `false` |
 | `provenance-output` | Path for unsigned provenance | `provenance.intoto.jsonl` |
 | `signed-provenance-output` | Path for signed provenance | `provenance.intoto.jsonl.sig` |
 | `report-job-summary` | Render provenance in the workflow job summary | `true` |

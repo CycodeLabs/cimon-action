@@ -48,26 +48,26 @@ inputs:
     required: false
     default: 'false'
   tlog-upload:
-    description: Allow the creation of a Rekor transparency log (TLog) entry.
+    description: 'Keyless signing only: allow the creation of a Rekor transparency log (TLog) entry. Ignored unless keyless is true.'
     required: false
     default: 'true'
   include-timestamp:
-    description: Allow timestamping of the artifact signature against a timestamping authority.
+    description: 'Keyless signing only: allow RFC 3161 timestamping of the artifact signature against a timestamping authority. Ignored unless keyless is true.'
     required: false
     default: 'false'
   fulcio-server-url:
-    description: Fulcio server URL
+    description: 'Keyless signing only: Fulcio server URL'
     required: false
     default: 'https://fulcio.sigstore.dev'
   rekor-server-url:
-    description: Rekor server URL
+    description: 'Keyless signing only: Rekor server URL'
     required: false
     default: 'https://rekor.sigstore.dev'
   timestamp-server-url:
-    description: Timestamp server URL
+    description: 'Keyless signing only: timestamp server URL. Not forwarded to the CLI unless keyless is true.'
     required: false
   allow-submit-data-to-public-sigstore:
-    description: Agree to submit data to an immutable public transparency log (Needed for public Sigstore)
+    description: 'Keyless signing only: agree to submit data to an immutable public transparency log (needed for public Sigstore). Ignored unless keyless is true.'
     required: false
     default: 'false'
   provenance-output:
