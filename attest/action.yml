@@ -67,7 +67,7 @@ inputs:
     description: 'Keyless signing only: timestamp server URL. Not forwarded to the CLI unless keyless is true.'
     required: false
   allow-submit-data-to-public-sigstore:
-    description: Agree to submit data to an immutable public transparency log (Needed for public Sigstore)
+    description: 'Keyless signing only: agree to submit data to an immutable public transparency log (needed for public Sigstore). Ignored unless keyless is true.'
     required: false
     default: 'false'
   provenance-output:
