@@ -52,7 +52,7 @@ inputs:
     required: false
     default: 'true'
   include-timestamp:
-    description: 'Keyless signing only: allow RFC 3161 timestamping of the artifact signature against a timestamping authority. Ignored unless keyless is true.'
+    description: 'Request an RFC 3161 timestamp of the artifact signature from a timestamping authority. Applies to keyless and sign-key signing.'
     required: false
     default: 'false'
   fulcio-server-url:
@@ -64,7 +64,7 @@ inputs:
     required: false
     default: 'https://rekor.sigstore.dev'
   timestamp-server-url:
-    description: 'Keyless signing only: timestamp server URL. Not forwarded to the CLI unless keyless is true.'
+    description: 'RFC 3161 timestamp server URL: a Sigstore timestamp authority or a standard RFC 3161 service. With sign-key, forwarded only when include-timestamp is true.'
     required: false
   allow-submit-data-to-public-sigstore:
     description: 'Keyless signing only: agree to submit data to an immutable public transparency log (needed for public Sigstore). Ignored unless keyless is true.'
