@@ -264,6 +264,17 @@ async function run(config) {
                 `--timestamp-server-url=${config.attest.timestampServerUrl}`
             );
         }
+    } else if (config.attest.signKey !== '' && config.attest.includeTimestamp) {
+        // Key-based signing only timestamps on an explicit request, so the
+        // inputs are forwarded only when include-timestamp is true. Older
+        // cimon releases accept and ignore them.
+        args.push('--include-timestamp=true');
+
+        if (config.attest.timestampServerUrl !== '') {
+            args.push(
+                `--timestamp-server-url=${config.attest.timestampServerUrl}`
+            );
+        }
     }
 
     await exec.exec(releasePath, args, {

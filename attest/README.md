@@ -47,13 +47,39 @@ If your environment cannot submit to the public Sigstore transparency
 log (e.g. customers in the USA / EU with data-residency requirements),
 use one of:
 
-- **KMS signing**: `--kms vault://<key-id>` (HashiCorp Vault transit) or
-  `--kms awskms://<arn>` (AWS KMS) — signature stays in your control.
+- **KMS signing**: `--kms vault://<key-id>` (HashiCorp Vault transit).
+  The signature stays in your control. Vault transit is the only KMS
+  backend implemented today.
 - **Keyed signing with checked-in private key**: `sign-key: private-key.pem`.
 - **Private Sigstore**: deploy your own Fulcio + Rekor and pass
   `fulcio-server-url` + `rekor-server-url`.
 
 See the inputs section below for the full list.
+
+### Timestamping key-based signatures
+
+A signature made with `sign-key` carries no time anchor unless you add an
+RFC 3161 timestamp, which lets a verifier show it was made before the
+key was rotated or revoked. Request one explicitly; `timestamp-server-url`
+accepts a Sigstore timestamp authority or a standard RFC 3161 service:
+
+```yaml
+- uses: cycodelabs/cimon-action/attest@v1
+  with:
+    subjects: dist\my-app.msi
+    sign-key: private-key.pem
+    include-timestamp: true
+    timestamp-server-url: http://timestamp.sectigo.com
+    fail-on-error: true
+```
+
+If the timestamp server cannot be reached, attestation fails. With the
+default `fail-on-error: false` that is only logged as a warning, so set
+it to `true` when the timestamp is required. Verify with
+`cimon attest verify --key public-key.pem --timestamp-certificate-chain
+<tsa-root.pem>`, pinning the timestamp authority's root certificate.
+This requires a cimon release with key-based timestamping; older
+releases accept these inputs and produce no timestamp.
 
 ## Inputs
 
@@ -64,11 +90,12 @@ See the inputs section below for the full list.
 | `skip-source-tree-check` | Skip verifying the source tree matches the recorded commit | `false` |
 | `sign-key` | Path to a private ECDSA/RSA/ED25519 PEM key | — |
 | `keyless` | Use keyless (Sigstore) signing | `false` |
-| `tlog-upload` | Upload signature to Rekor transparency log | `true` |
-| `fulcio-server-url` | Fulcio server URL | `https://fulcio.sigstore.dev` |
-| `rekor-server-url` | Rekor server URL | `https://rekor.sigstore.dev` |
-| `timestamp-server-url` | RFC3161 timestamp server URL | — |
-| `allow-submit-data-to-public-sigstore` | Required when using public Sigstore | `false` |
+| `tlog-upload` | **Keyless only.** Upload signature to Rekor transparency log | `true` |
+| `include-timestamp` | Request an RFC 3161 timestamp and embed it in the signature. Applies to `keyless` and `sign-key` signing | `false` |
+| `fulcio-server-url` | **Keyless only.** Fulcio server URL | `https://fulcio.sigstore.dev` |
+| `rekor-server-url` | **Keyless only.** Rekor server URL | `https://rekor.sigstore.dev` |
+| `timestamp-server-url` | RFC 3161 timestamp server URL: a Sigstore timestamp authority or a standard RFC 3161 service. With `sign-key`, forwarded only when `include-timestamp: true` | — |
+| `allow-submit-data-to-public-sigstore` | **Keyless only.** Required when using public Sigstore | `false` |
 | `provenance-output` | Path for unsigned provenance | `provenance.intoto.jsonl` |
 | `signed-provenance-output` | Path for signed provenance | `provenance.intoto.jsonl.sig` |
 | `report-job-summary` | Render provenance in the workflow job summary | `true` |
