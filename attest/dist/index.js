@@ -127855,7 +127855,7 @@ async function run(config) {
             path__WEBPACK_IMPORTED_MODULE_5__.dirname(config.attest.provenanceOutput),
             { continueOnError: true }
         );
-        if (config.attest.signKey !== '') {
+        if (config.attest.signKey !== '' || config.attest.keyless) {
             client.uploadArtifact(
                 `signed-provenance-${jobId}-${randomSuffix}`,
                 [config.attest.signedProvenanceOutput],
