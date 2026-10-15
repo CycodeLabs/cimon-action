@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "all": "npm run clean && npm run dist/index.js",
+    "test": "node --experimental-vm-modules --test index.test.js",
     "dist/index.js": "ncc build --out dist/ index.js",
     "clean": "rm -rf dist"
   },
