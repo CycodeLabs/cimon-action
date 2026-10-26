@@ -9,6 +9,7 @@ on:
       - 'attest/index.js'
       - 'attest/package.json'
       - 'attest/package-lock.json'
+      - '.github/workflows/build-attest-dist.yaml'
   workflow_dispatch:
 
 permissions:
@@ -50,6 +51,7 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           BASE_REPO: ${{ github.repository }}
         run: |
           # SECURITY: only act if the rebuild produced exactly one
@@ -88,4 +90,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add attest/dist/index.js
           git commit -m "chore(attest): rebuild dist/index.js"
-          git push
+          # The checkout is the PR head SHA, a detached HEAD, so name the
+          # PR branch. If the branch moved since this run started, the push
+          # is rejected as non-fast-forward rather than overwriting it.
+          git push origin "HEAD:refs/heads/$PR_HEAD_REF"
