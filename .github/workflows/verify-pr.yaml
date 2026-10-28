@@ -43,6 +43,16 @@ jobs:
         run: |
           & "C:\Program Files\Git\usr\bin\openssl.exe" genrsa -out private-key.pem 3072
 
+      # The agent (automatic SBOM generation) is Linux-only, so on Windows
+      # an SBOM comes from another tool and is signed via the `sbom` input.
+      # A minimal CycloneDX document stands in for a real generator here.
+      - name: Write sample CycloneDX SBOM
+        shell: pwsh
+        run: |
+          @'
+          {"bomFormat":"CycloneDX","specVersion":"1.5","version":1,"components":[{"type":"application","name":"sample","version":"0.0.1"}]}
+          '@ | Set-Content -Path sbom.cdx.json
+
       - name: Cimon Attest (Windows, keyed)
         uses: ./attest
         with:
@@ -50,13 +60,16 @@ jobs:
           secret:    ${{ secrets.CIMON_SECRET }}
           subjects:  dist\sample.exe
           sign-key:  private-key.pem
+          sbom:      sbom.cdx.json
           report-job-summary: true
           report-artifact:    true
           fail-on-error:      true
 
-      - name: Show provenance
+      - name: Show provenance and SBOM attestation
         shell: pwsh
-        run: Get-Content provenance.intoto.jsonl
+        run: |
+          Get-Content provenance.intoto.jsonl
+          Get-Item sbom.intoto.jsonl.sig | Select-Object FullName, Length
 
   verify:
     runs-on: ubuntu-22.04

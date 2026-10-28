@@ -127706,12 +127706,68 @@ function getActionConfig() {
             skipSourceTreeCheck: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput(
                 'skip-source-tree-check'
             ),
+            sbom: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('sbom'),
+            signedSbomOutput: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('signed-sbom-output'),
         },
         report: {
             reportJobSummary: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-job-summary'),
             reportArtifact: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-artifact'),
         },
     };
+}
+
+// backendArgs returns the Cycode backend and logging flags shared by every
+// `cimon attest` subcommand.
+function backendArgs(config) {
+    const args = [];
+    if (config.cimon.clientId !== '')
+        args.push('--client-id', config.cimon.clientId);
+    if (config.cimon.secret !== '') args.push('--secret', config.cimon.secret);
+    if (config.cimon.url !== '') args.push('--url', config.cimon.url);
+    if (config.cimon.logLevel !== '')
+        args.push('--log-level', config.cimon.logLevel);
+    return args;
+}
+
+// signingArgs returns the key / keyless / Sigstore / timestamp flags shared
+// by `attest generate-and-sign` and `attest sbom`, so both attestations are
+// signed the same way.
+function signingArgs(config) {
+    const args = [];
+    if (config.attest.signKey !== '') args.push('--key', config.attest.signKey);
+    if (config.attest.keyless) {
+        args.push('--keyless');
+
+        args.push(`--tlog-upload=${config.attest.tlogUpload}`);
+        args.push(`--include-timestamp=${config.attest.includeTimestamp}`);
+        args.push(`--yes=${config.attest.allowSubmitDataToPublicSigstore}`);
+
+        if (config.attest.fulcioServerUrl !== '') {
+            args.push(`--fulcio-server-url=${config.attest.fulcioServerUrl}`);
+        }
+
+        if (config.attest.rekorServerUrl !== '') {
+            args.push(`--rekor-server-url=${config.attest.rekorServerUrl}`);
+        }
+
+        if (config.attest.timestampServerUrl !== '') {
+            args.push(
+                `--timestamp-server-url=${config.attest.timestampServerUrl}`
+            );
+        }
+    } else if (config.attest.signKey !== '' && config.attest.includeTimestamp) {
+        // Key-based signing only timestamps on an explicit request, so the
+        // inputs are forwarded only when include-timestamp is true. Older
+        // cimon releases accept and ignore them.
+        args.push('--include-timestamp=true');
+
+        if (config.attest.timestampServerUrl !== '') {
+            args.push(
+                `--timestamp-server-url=${config.attest.timestampServerUrl}`
+            );
+        }
+    }
+    return args;
 }
 
 async function run(config) {
@@ -127784,71 +127840,50 @@ async function run(config) {
         config.attest.subjects = config.attest.imageRef;
     }
 
-    // Prepare CLI arguments conditionally
-    const args = ['attest', 'generate-and-sign'];
-    if (config.attest.subjects !== '')
-        args.push('--subjects', config.attest.subjects);
-    if (config.attest.provenanceOutput !== '')
-        args.push('--output-prov', config.attest.provenanceOutput);
-    if (config.attest.signedProvenanceOutput !== '')
-        args.push('--output-signed-prov', config.attest.signedProvenanceOutput);
-    if (config.attest.signKey !== '') args.push('--key', config.attest.signKey);
-    if (config.attest.sourcePath !== '')
-        args.push('--source-path', config.attest.sourcePath);
-    if (config.attest.skipSourceTreeCheck)
-        args.push('--skip-source-tree-check');
-    if (config.cimon.clientId !== '')
-        args.push('--client-id', config.cimon.clientId);
-    if (config.cimon.secret !== '') args.push('--secret', config.cimon.secret);
-    if (config.cimon.url !== '') args.push('--url', config.cimon.url);
-    if (config.cimon.logLevel !== '')
-        args.push('--log-level', config.cimon.logLevel);
-    if (config.report.reportJobSummary) args.push('--report-job-summary');
-    if (config.attest.keyless) {
-        args.push('--keyless');
-
-        args.push(`--tlog-upload=${config.attest.tlogUpload}`);
-        args.push(`--include-timestamp=${config.attest.includeTimestamp}`);
-        args.push(`--yes=${config.attest.allowSubmitDataToPublicSigstore}`);
-
-        if (config.attest.fulcioServerUrl !== '') {
-            args.push(`--fulcio-server-url=${config.attest.fulcioServerUrl}`);
-        }
-
-        if (config.attest.rekorServerUrl !== '') {
-            args.push(`--rekor-server-url=${config.attest.rekorServerUrl}`);
-        }
-
-        if (config.attest.timestampServerUrl !== '') {
-            args.push(
-                `--timestamp-server-url=${config.attest.timestampServerUrl}`
-            );
-        }
-    } else if (config.attest.signKey !== '' && config.attest.includeTimestamp) {
-        // Key-based signing only timestamps on an explicit request, so the
-        // inputs are forwarded only when include-timestamp is true. Older
-        // cimon releases accept and ignore them.
-        args.push('--include-timestamp=true');
-
-        if (config.attest.timestampServerUrl !== '') {
-            args.push(
-                `--timestamp-server-url=${config.attest.timestampServerUrl}`
-            );
-        }
+    // Validate the optional SBOM input up front so a bad path fails before
+    // the provenance run rather than after it.
+    if (config.attest.sbom !== '' && !fs__WEBPACK_IMPORTED_MODULE_6__.existsSync(config.attest.sbom)) {
+        throw new Error(
+            `SBOM file does not exist: ${config.attest.sbom}. Generate it ` +
+            `with an SBOM tool (syft, sbom-tool, cyclonedx-py, ...) in an ` +
+            `earlier step, or unset the sbom input.`
+        );
     }
 
-    await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(releasePath, args, {
+    const provenanceArgs = ['attest', 'generate-and-sign'];
+    if (config.attest.subjects !== '')
+        provenanceArgs.push('--subjects', config.attest.subjects);
+    if (config.attest.provenanceOutput !== '')
+        provenanceArgs.push('--output-prov', config.attest.provenanceOutput);
+    if (config.attest.signedProvenanceOutput !== '')
+        provenanceArgs.push(
+            '--output-signed-prov',
+            config.attest.signedProvenanceOutput
+        );
+    if (config.attest.sourcePath !== '')
+        provenanceArgs.push('--source-path', config.attest.sourcePath);
+    if (config.attest.skipSourceTreeCheck)
+        provenanceArgs.push('--skip-source-tree-check');
+    if (config.report.reportJobSummary)
+        provenanceArgs.push('--report-job-summary');
+    provenanceArgs.push(...backendArgs(config), ...signingArgs(config));
+
+    const execOptions = {
         env: {
             ...process.env,
             GITHUB_TOKEN: config.github.token,
         },
-    });
+    };
 
-    if (config.report.reportArtifact) {
-        const client = new _actions_artifact__WEBPACK_IMPORTED_MODULE_3__.DefaultArtifactClient();
-        const jobId = process.env.GITHUB_JOB;
-        const randomSuffix = Math.floor(Math.random() * 1000);
+    await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(releasePath, provenanceArgs, execOptions);
 
+    const client = config.report.reportArtifact
+        ? new _actions_artifact__WEBPACK_IMPORTED_MODULE_3__.DefaultArtifactClient()
+        : null;
+    const jobId = process.env.GITHUB_JOB;
+    const randomSuffix = Math.floor(Math.random() * 1000);
+
+    if (client) {
         client.uploadArtifact(
             `provenance-${jobId}-${randomSuffix}`,
             [config.attest.provenanceOutput],
@@ -127866,6 +127901,35 @@ async function run(config) {
     }
 
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Build runtime SLSA provenance finished successfully`);
+
+    // Optional SBOM attestation: wrap an SBOM produced by another tool in a
+    // signed in-toto statement over the same subjects. On Windows/macOS
+    // the agent (automatic SBOM generation) does not exist, so this is the
+    // only way to get an SBOM attestation there.
+    if (config.attest.sbom !== '') {
+        const sbomArgs = ['attest', 'sbom', '--sbom', config.attest.sbom];
+        if (config.attest.subjects !== '')
+            sbomArgs.push('--subjects', config.attest.subjects);
+        if (config.attest.signedSbomOutput !== '')
+            sbomArgs.push('--output-signed-sbom', config.attest.signedSbomOutput);
+        sbomArgs.push(...backendArgs(config), ...signingArgs(config));
+
+        await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(releasePath, sbomArgs, execOptions);
+
+        if (config.attest.signedSbomOutput !== '') {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.setOutput('signed-sbom-path', config.attest.signedSbomOutput);
+            if (client) {
+                client.uploadArtifact(
+                    `signed-sbom-${jobId}-${randomSuffix}`,
+                    [config.attest.signedSbomOutput],
+                    path__WEBPACK_IMPORTED_MODULE_5__.dirname(config.attest.signedSbomOutput),
+                    { continueOnError: true }
+                );
+            }
+        }
+
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`SBOM attestation finished successfully`);
+    }
 }
 
 try {
