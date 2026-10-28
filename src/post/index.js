@@ -67,6 +67,16 @@ function getCimonPath() {
 }
 
 async function run(config) {
+    // The main step refuses to start the agent on non-Linux runners (see
+    // src/main/index.js), so there is nothing to stop here. Skip instead
+    // of trying to download the Linux install script.
+    if (process.platform !== 'linux') {
+        core.info(
+            `Cimon agent is Linux-only; nothing to stop on ${process.platform}`
+        );
+        return;
+    }
+
     const cimonPath = getCimonPath();
 
     // Ensure the Cimon binary is available (fallback: download from S3).

@@ -18,6 +18,24 @@ This action helps seamlessly deploy the agent into any desired GitHub Actions bu
 
 Learn more about Cimon in our [docs](https://docs.cimon.build).
 
+## 🖥️ Supported platforms
+
+| Runner OS | `cycodelabs/cimon-action` (agent) | `cycodelabs/cimon-action/attest` |
+| --------- | --------------------------------- | -------------------------------- |
+| Linux     | ✅                                | ✅                               |
+| Windows   | ❌                                | ✅                               |
+| macOS     | ❌                                | ✅                               |
+
+The agent deployed by this action (runtime monitoring, hardening, process and
+file reports, automatic SBOM generation and the `CIMON_SBOM_*` settings) is
+built on eBPF and runs **only on Linux runners**. The action fails fast with an
+explanatory error on any other OS.
+
+The Windows and macOS releases of `cimon` are attest-only builds. Use the
+[attest sub-action](./attest/README.md) there to generate and sign SLSA
+provenance, and to sign an SBOM produced by another tool with
+`cimon attest sbom`.
+
 ## 🏃‍♂️ Getting Started with Cimon
 
 Getting started with Cimon is as simple as introducing a single step in the pipeline. Cimon Action should be the first step in each of your jobs.
