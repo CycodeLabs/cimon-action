@@ -127840,16 +127840,6 @@ async function run(config) {
         config.attest.subjects = config.attest.imageRef;
     }
 
-    // Validate the optional SBOM input up front so a bad path fails before
-    // the provenance run rather than after it.
-    if (config.attest.sbom !== '' && !fs__WEBPACK_IMPORTED_MODULE_6__.existsSync(config.attest.sbom)) {
-        throw new Error(
-            `SBOM file does not exist: ${config.attest.sbom}. Generate it ` +
-            `with an SBOM tool (syft, sbom-tool, cyclonedx-py, ...) in an ` +
-            `earlier step, or unset the sbom input.`
-        );
-    }
-
     const provenanceArgs = ['attest', 'generate-and-sign'];
     if (config.attest.subjects !== '')
         provenanceArgs.push('--subjects', config.attest.subjects);
@@ -127905,8 +127895,18 @@ async function run(config) {
     // Optional SBOM attestation: wrap an SBOM produced by another tool in a
     // signed in-toto statement over the same subjects. On Windows/macOS
     // the agent (automatic SBOM generation) does not exist, so this is the
-    // only way to get an SBOM attestation there.
+    // only way to get an SBOM attestation there. The path is checked only
+    // here, after the provenance run, so a bad value for this optional
+    // input never blocks the provenance attestation.
     if (config.attest.sbom !== '') {
+        if (!fs__WEBPACK_IMPORTED_MODULE_6__.existsSync(config.attest.sbom)) {
+            throw new Error(
+                `SBOM file does not exist: ${config.attest.sbom}. Generate it ` +
+                `with an SBOM tool (syft, sbom-tool, cyclonedx-py, ...) in an ` +
+                `earlier step, or unset the sbom input.`
+            );
+        }
+
         const sbomArgs = ['attest', 'sbom', '--sbom', config.attest.sbom];
         if (config.attest.subjects !== '')
             sbomArgs.push('--subjects', config.attest.subjects);

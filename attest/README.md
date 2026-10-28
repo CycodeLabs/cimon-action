@@ -49,6 +49,8 @@ to the provenance, by passing it through the `sbom` input:
 
 - uses: cycodelabs/cimon-action/attest@v1
   with:
+    client-id: ${{ secrets.CIMON_CLIENT_ID }}
+    secret: ${{ secrets.CIMON_SECRET }}
     subjects: dist\my-app.exe dist\my-app.dll
     sbom: sbom.cdx.json
     sign-key: private-key.pem
@@ -56,17 +58,27 @@ to the provenance, by passing it through the `sbom` input:
 ```
 
 Accepted SBOM formats: CycloneDX (JSON or XML) and SPDX 2.x (JSON, YAML or
-tag-value). The SBOM is signed with the same `sign-key` / `keyless` / KMS
+tag-value). The SBOM is signed with the same `sign-key` / `keyless`
 settings as the provenance. Verify it with:
 
 ```bash
-cimon attest verify --type sbom --subjects "dist/my-app.exe dist/my-app.dll" \
+cimon attest verify --client-id "$CIMON_CLIENT_ID" --secret "$CIMON_SECRET" \
+  --type sbom --subjects "dist/my-app.exe dist/my-app.dll" \
   --key public-key.pem --signed-prov sbom.intoto.jsonl.sig
 ```
 
 The same can be done by hand after the action, since it exports the binary
-as `CIMON_PATH` and on `PATH`: `cimon attest sbom --sbom sbom.cdx.json
---subjects ... --key private-key.pem`. Requires cimon v1.0.27 or later.
+as `CIMON_PATH` and on `PATH`:
+
+```bash
+cimon attest sbom --client-id "$CIMON_CLIENT_ID" --secret "$CIMON_SECRET" \
+  --sbom sbom.cdx.json --subjects "dist/my-app.exe dist/my-app.dll" \
+  --key private-key.pem
+```
+
+`cimon attest sbom` and `cimon attest verify` need the Cycode credentials
+either as `--client-id` / `--secret` or as the `CIMON_CLIENT_ID` /
+`CIMON_SECRET` environment variables. Requires cimon v1.0.27 or later.
 
 ## GHES support
 

@@ -28,8 +28,9 @@ Learn more about Cimon in our [docs](https://docs.cimon.build).
 
 The agent deployed by this action (runtime monitoring, hardening, process and
 file reports, automatic SBOM generation and the `CIMON_SBOM_*` settings) is
-built on eBPF and runs **only on Linux runners**. The action fails fast with an
-explanatory error on any other OS.
+built on eBPF and runs **only on Linux runners**. On any other OS the action
+stops before installing anything and logs an explanatory error (the step
+fails with `fail-on-error: true`).
 
 The Windows and macOS releases of `cimon` are attest-only builds. Use the
 [attest sub-action](./attest/README.md) there to generate and sign SLSA
