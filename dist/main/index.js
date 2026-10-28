@@ -27653,6 +27653,20 @@ async function sudoExists() {
 }
 
 async function run(config) {
+    // The Cimon agent is built on eBPF and exists only for Linux. The
+    // Windows/macOS cimon releases are attest-only builds with no `agent`
+    // command, so bail out before downloading anything rather than
+    // failing later with `unknown command "agent" for "cimon-attest"`.
+    if (process.platform !== 'linux') {
+        throw new Error(
+            `cimon-action runs the Cimon agent (runtime monitoring, hardening, ` +
+            `SBOM generation), which is built on eBPF and is Linux-only; this ` +
+            `runner is ${process.platform}. On Windows and macOS use the attest ` +
+            `sub-action (cycodelabs/cimon-action/attest@v1) for provenance and ` +
+            `SBOM attestation instead.`
+        );
+    }
+
     let releasePath;
 
     if (config.cimon.releasePath != '') {

@@ -1,5 +1,5 @@
 name: Cimon by Cycode
-description: Runtime Security Solution for your CI/CD Pipeline
+description: Runtime Security Solution for your CI/CD Pipeline. Linux runners only; use cimon-action/attest on Windows and macOS.
 branding:
   icon: shield
   color: green

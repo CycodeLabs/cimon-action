@@ -78,6 +78,22 @@ inputs:
     description: Signed provenance output path. Can be absolute path, or relative path to the default working directory
     required: false
     default: 'provenance.intoto.jsonl.sig'
+  sbom:
+    description: |
+      Path to an SBOM produced by another tool (syft, Microsoft sbom-tool,
+      cyclonedx-py, ...) to attest alongside the provenance. Accepts
+      CycloneDX (JSON or XML) and SPDX 2.x (JSON, YAML or tag-value). When
+      set, the action runs `cimon attest sbom` over the same subjects with
+      the same signing settings after the provenance run. Requires cimon
+      v1.0.27 or later. This is the way to get a signed SBOM attestation
+      on Windows and macOS, where the Cimon agent (automatic SBOM
+      generation) is not available.
+    required: false
+    default: ''
+  signed-sbom-output:
+    description: Signed SBOM attestation output path. Can be absolute path, or relative path to the default working directory. Used only when sbom is set
+    required: false
+    default: 'sbom.intoto.jsonl.sig'
   github-token:
     description: GitHub token for enriching build information
     required: false
@@ -106,6 +122,10 @@ outputs:
       this action invocation. Downstream steps in the same job can also
       reach the binary via the CIMON_PATH env var, or call `cimon` /
       `cimon.exe` directly since the action adds the install dir to PATH.
+  signed-sbom-path:
+    description: |
+      Path of the signed SBOM attestation written by `cimon attest sbom`.
+      Empty when the sbom input is not set.
 
 runs:
   using: node20

@@ -35,6 +35,51 @@ matching `cimon` binary (`cimon.exe` on Windows). It uses
 `$RUNNER_TEMP` so it cooperates with on-prem GHES self-hosted runners
 that may not have `/tmp` writable.
 
+## SBOM attestation (Windows, macOS, or any tool-generated SBOM)
+
+The Cimon agent that generates SBOMs automatically is Linux-only. On any
+runner you can instead produce an SBOM with the tool of your choice and
+have Cimon sign it as an in-toto attestation over the same artifacts, next
+to the provenance, by passing it through the `sbom` input:
+
+```yaml
+- name: Generate SBOM
+  shell: pwsh
+  run: syft dir:dist -o cyclonedx-json=sbom.cdx.json   # any generator works
+
+- uses: cycodelabs/cimon-action/attest@v1
+  with:
+    client-id: ${{ secrets.CIMON_CLIENT_ID }}
+    secret: ${{ secrets.CIMON_SECRET }}
+    subjects: dist\my-app.exe dist\my-app.dll
+    sbom: sbom.cdx.json
+    sign-key: private-key.pem
+    signed-sbom-output: sbom.intoto.jsonl.sig
+```
+
+Accepted SBOM formats: CycloneDX (JSON or XML) and SPDX 2.x (JSON, YAML or
+tag-value). The SBOM is signed with the same `sign-key` / `keyless`
+settings as the provenance. Verify it with:
+
+```bash
+cimon attest verify --client-id "$CIMON_CLIENT_ID" --secret "$CIMON_SECRET" \
+  --type sbom --subjects "dist/my-app.exe dist/my-app.dll" \
+  --key public-key.pem --signed-prov sbom.intoto.jsonl.sig
+```
+
+The same can be done by hand after the action, since it exports the binary
+as `CIMON_PATH` and on `PATH`:
+
+```bash
+cimon attest sbom --client-id "$CIMON_CLIENT_ID" --secret "$CIMON_SECRET" \
+  --sbom sbom.cdx.json --subjects "dist/my-app.exe dist/my-app.dll" \
+  --key private-key.pem
+```
+
+`cimon attest sbom` and `cimon attest verify` need the Cycode credentials
+either as `--client-id` / `--secret` or as the `CIMON_CLIENT_ID` /
+`CIMON_SECRET` environment variables. Requires cimon v1.0.27 or later.
+
 ## GHES support
 
 The action honors `GITHUB_API_URL` and `GITHUB_SERVER_URL` (set
@@ -98,11 +143,20 @@ releases accept these inputs and produce no timestamp.
 | `allow-submit-data-to-public-sigstore` | **Keyless only.** Required when using public Sigstore | `false` |
 | `provenance-output` | Path for unsigned provenance | `provenance.intoto.jsonl` |
 | `signed-provenance-output` | Path for signed provenance | `provenance.intoto.jsonl.sig` |
+| `sbom` | Path to an SBOM produced by another tool (CycloneDX JSON/XML or SPDX 2.x JSON/YAML/tag-value) to sign as an SBOM attestation over the same subjects. Requires cimon v1.0.27 or later | — |
+| `signed-sbom-output` | Path for the signed SBOM attestation. Used only when `sbom` is set | `sbom.intoto.jsonl.sig` |
 | `report-job-summary` | Render provenance in the workflow job summary | `true` |
 | `report-artifact` | Upload provenance as a workflow artifact | `true` |
 | `github-token` | Token used for build metadata enrichment | `${{ github.token }}` |
 | `log-level` | `trace` / `debug` / `info` | `info` |
 | `fail-on-error` | Fail the step on attestation errors | `false` |
+
+## Outputs
+
+| Name | Description |
+|---|---|
+| `cimon-path` | Absolute path to the installed `cimon` / `cimon.exe` binary (also exported as `CIMON_PATH` and added to `PATH`) |
+| `signed-sbom-path` | Path of the signed SBOM attestation. Empty unless `sbom` is set |
 
 ## Development
 
