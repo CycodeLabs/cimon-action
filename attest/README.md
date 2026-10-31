@@ -58,8 +58,8 @@ to the provenance, by passing it through the `sbom` input:
 ```
 
 Accepted SBOM formats: CycloneDX (JSON or XML) and SPDX 2.x (JSON, YAML or
-tag-value). The SBOM is signed with the same `sign-key` / `keyless`
-settings as the provenance. Verify it with:
+tag-value). The SBOM is signed with the same `sign-key` / `kms` /
+`keyless` settings as the provenance. Verify it with:
 
 ```bash
 cimon attest verify --client-id "$CIMON_CLIENT_ID" --secret "$CIMON_SECRET" \
@@ -92,18 +92,41 @@ If your environment cannot submit to the public Sigstore transparency
 log (e.g. customers in the USA / EU with data-residency requirements),
 use one of:
 
-- **KMS signing**: `--kms vault://<key-id>` (HashiCorp Vault transit).
-  The signature stays in your control. Vault transit is the only KMS
-  backend implemented today.
+- **KMS signing**: `kms: vault://<key-name>` (HashiCorp Vault transit).
+  The private key never leaves Vault; cimon sends the digest and receives
+  the signature. Vault transit is the only KMS backend implemented today,
+  and it requires cimon v1.0.28 or later.
 - **Keyed signing with checked-in private key**: `sign-key: private-key.pem`.
 - **Private Sigstore**: deploy your own Fulcio + Rekor and pass
   `fulcio-server-url` + `rekor-server-url`.
 
 See the inputs section below for the full list.
 
+### KMS signing with HashiCorp Vault transit
+
+cimon reads the Vault connection from the standard Vault environment
+variables (`VAULT_ADDR`, `VAULT_TOKEN`, and optionally `VAULT_NAMESPACE`
+and `VAULT_CACERT`). The transit engine must be mounted at `transit/`, and
+the key must support signing (for example `ecdsa-p256` or `rsa-3072`):
+
+```yaml
+- uses: cycodelabs/cimon-action/attest@v1
+  env:
+    VAULT_ADDR: https://vault.example.com:8200
+    VAULT_TOKEN: ${{ secrets.VAULT_TOKEN }}
+  with:
+    subjects: dist\my-app.msi
+    kms: vault://cimon-signing
+    fail-on-error: true
+```
+
+Verifiers need the key's public half, which Vault returns from
+`transit/keys/<key-name>`:
+`cimon attest verify --key public-key.pem --signed-prov provenance.intoto.jsonl.sig`.
+
 ### Timestamping key-based signatures
 
-A signature made with `sign-key` carries no time anchor unless you add an
+A signature made with `sign-key` or `kms` carries no time anchor unless you add an
 RFC 3161 timestamp, which lets a verifier show it was made before the
 key was rotated or revoked. Request one explicitly; `timestamp-server-url`
 accepts a Sigstore timestamp authority or a standard RFC 3161 service:
@@ -134,12 +157,13 @@ releases accept these inputs and produce no timestamp.
 | `source-path` | Path to the source checkout recorded in the attestation. Unset means automatic discovery (subject paths, run-id directory, workspace). Requires cimon v1.0.24 or later | — |
 | `skip-source-tree-check` | Skip verifying the source tree matches the recorded commit | `false` |
 | `sign-key` | Path to a private ECDSA/RSA/ED25519 PEM key | — |
+| `kms` | KMS key URI for signing. HashiCorp Vault transit: `vault://<key-name>`, configured through `VAULT_ADDR` and `VAULT_TOKEN`. Requires cimon v1.0.28 or later | — |
 | `keyless` | Use keyless (Sigstore) signing | `false` |
 | `tlog-upload` | **Keyless only.** Upload signature to Rekor transparency log | `true` |
-| `include-timestamp` | Request an RFC 3161 timestamp and embed it in the signature. Applies to `keyless` and `sign-key` signing | `false` |
+| `include-timestamp` | Request an RFC 3161 timestamp and embed it in the signature. Applies to `keyless`, `sign-key` and `kms` signing | `false` |
 | `fulcio-server-url` | **Keyless only.** Fulcio server URL | `https://fulcio.sigstore.dev` |
 | `rekor-server-url` | **Keyless only.** Rekor server URL | `https://rekor.sigstore.dev` |
-| `timestamp-server-url` | RFC 3161 timestamp server URL: a Sigstore timestamp authority or a standard RFC 3161 service. With `sign-key`, forwarded only when `include-timestamp: true` | — |
+| `timestamp-server-url` | RFC 3161 timestamp server URL: a Sigstore timestamp authority or a standard RFC 3161 service. With `sign-key` or `kms`, forwarded only when `include-timestamp: true` | — |
 | `allow-submit-data-to-public-sigstore` | **Keyless only.** Required when using public Sigstore | `false` |
 | `provenance-output` | Path for unsigned provenance | `provenance.intoto.jsonl` |
 | `signed-provenance-output` | Path for signed provenance | `provenance.intoto.jsonl.sig` |

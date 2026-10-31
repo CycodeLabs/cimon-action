@@ -127691,6 +127691,7 @@ function getActionConfig() {
             subjects: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('subjects'),
             imageRef: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('image-ref'),
             signKey: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('sign-key'),
+            kms: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('kms'),
             keyless: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('keyless'),
             tlogUpload: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('tlog-upload'),
             includeTimestamp: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('include-timestamp'),
@@ -127729,12 +127730,19 @@ function backendArgs(config) {
     return args;
 }
 
-// signingArgs returns the key / keyless / Sigstore / timestamp flags shared
-// by `attest generate-and-sign` and `attest sbom`, so both attestations are
-// signed the same way.
+// keyBasedSigning reports whether the attestations are signed with a key file
+// or a KMS key rather than keyless.
+function keyBasedSigning(config) {
+    return config.attest.signKey !== '' || config.attest.kms !== '';
+}
+
+// signingArgs returns the key / KMS / keyless / Sigstore / timestamp flags
+// shared by `attest generate-and-sign` and `attest sbom`, so both
+// attestations are signed the same way.
 function signingArgs(config) {
     const args = [];
     if (config.attest.signKey !== '') args.push('--key', config.attest.signKey);
+    if (config.attest.kms !== '') args.push('--kms', config.attest.kms);
     if (config.attest.keyless) {
         args.push('--keyless');
 
@@ -127755,8 +127763,8 @@ function signingArgs(config) {
                 `--timestamp-server-url=${config.attest.timestampServerUrl}`
             );
         }
-    } else if (config.attest.signKey !== '' && config.attest.includeTimestamp) {
-        // Key-based signing only timestamps on an explicit request, so the
+    } else if (keyBasedSigning(config) && config.attest.includeTimestamp) {
+        // Key and KMS signing only timestamp on an explicit request, so the
         // inputs are forwarded only when include-timestamp is true. Older
         // cimon releases accept and ignore them.
         args.push('--include-timestamp=true');
@@ -127880,7 +127888,7 @@ async function run(config) {
             path__WEBPACK_IMPORTED_MODULE_5__.dirname(config.attest.provenanceOutput),
             { continueOnError: true }
         );
-        if (config.attest.signKey !== '') {
+        if (keyBasedSigning(config)) {
             client.uploadArtifact(
                 `signed-provenance-${jobId}-${randomSuffix}`,
                 [config.attest.signedProvenanceOutput],
