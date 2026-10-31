@@ -1,7 +1,15 @@
 import core from '@actions/core';
 import exec from '@actions/exec';
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import * as http from '@actions/http-client';
+
+const IS_WINDOWS = process.platform === 'win32';
+
+// Where release downloads go. /tmp on Linux, as before; the runner's temp
+// directory on Windows.
+const DOWNLOAD_DIR = IS_WINDOWS ? (process.env.RUNNER_TEMP || os.tmpdir()) : '/tmp';
 
 const CIMON_SCRIPT_DOWNLOAD_URL =
     'https://cimon-releases.s3.amazonaws.com/install.sh';
@@ -41,8 +49,9 @@ async function getLatestV1Version() {
 async function installCosign() {
     // Download cosign binary for signature verification.
     const cosignVersion = 'v2.2.1';
-    const cosignUrl = `https://github.com/sigstore/cosign/releases/download/${cosignVersion}/cosign-linux-amd64`;
-    const cosignPath = '/tmp/cosign';
+    const cosignAsset = IS_WINDOWS ? 'cosign-windows-amd64.exe' : 'cosign-linux-amd64';
+    const cosignUrl = `https://github.com/sigstore/cosign/releases/download/${cosignVersion}/${cosignAsset}`;
+    const cosignPath = path.join(DOWNLOAD_DIR, IS_WINDOWS ? 'cosign.exe' : 'cosign');
 
     if (!fs.existsSync(cosignPath)) {
         core.info(`Installing cosign ${cosignVersion}...`);
@@ -55,10 +64,11 @@ async function installCosign() {
 async function downloadV1Binary(version) {
     const arch = process.arch === 'arm64' ? 'arm64' : 'x86_64';
     const baseUrl = `${CIMON_RELEASES_GITHUB}/download/${version}`;
-    const tarName = `cimon_linux_${arch}.tar.gz`;
-    const tarPath = '/tmp/cimon-v1.tar.gz';
-    const checksumPath = '/tmp/cimon-v1-checksums.txt';
-    const checksumSigPath = '/tmp/cimon-v1-checksums.txt.sig';
+    // Windows releases ship only for x86_64, as a zip.
+    const tarName = IS_WINDOWS ? 'cimon_windows_x86_64.zip' : `cimon_linux_${arch}.tar.gz`;
+    const tarPath = path.join(DOWNLOAD_DIR, IS_WINDOWS ? 'cimon-v1.zip' : 'cimon-v1.tar.gz');
+    const checksumPath = path.join(DOWNLOAD_DIR, 'cimon-v1-checksums.txt');
+    const checksumSigPath = path.join(DOWNLOAD_DIR, 'cimon-v1-checksums.txt.sig');
 
     core.info(`Downloading cimon ${version} for ${arch}...`);
     await downloadBinaryToFile(`${baseUrl}/${tarName}`, tarPath);
@@ -99,7 +109,7 @@ async function downloadV1Binary(version) {
         '-----END PUBLIC KEY-----',
         '',
     ].join('\n');
-    const pubKeyPath = '/tmp/cimon-cosign-verify.pub';
+    const pubKeyPath = path.join(DOWNLOAD_DIR, 'cimon-cosign-verify.pub');
     fs.writeFileSync(pubKeyPath, COSIGN_PUB);
 
     core.info('Verifying cosign signature...');
@@ -147,12 +157,49 @@ async function downloadV1Binary(version) {
 
     core.info(`Binary verified (cosign + SHA256): ${actualHash.substring(0, 16)}...`);
 
-    const extractDir = '/tmp/cimon-v1';
+    const extractDir = path.join(DOWNLOAD_DIR, 'cimon-v1');
     fs.mkdirSync(extractDir, { recursive: true });
+    if (IS_WINDOWS) {
+        // Windows' own tar.exe (bsdtar) extracts zip archives.
+        await exec.exec('tar', ['-xf', tarPath, '-C', extractDir]);
+        return path.join(extractDir, 'cimon.exe');
+    }
     await exec.exec('tar', ['-xzf', tarPath, '-C', extractDir]);
     fs.chmodSync(`${extractDir}/cimon`, 0o755);
 
     return `${extractDir}/cimon`;
+}
+
+// The Windows agent observes builds through ETW and generates C/C++ SBOMs.
+// It has no hardening, network policy, file integrity or memory protection,
+// so asking for them is an error rather than a silent no-op.
+function verifyWindowsInputs(config) {
+    const unsupported = [];
+    if (config.cimon.preventionMode) unsupported.push('prevent');
+    if (config.cimon.hardening) unsupported.push('hardening');
+    if (config.cimon.fileIntegrity) unsupported.push('file-integrity');
+    if (config.cimon.memoryProtection) unsupported.push('memory-protection');
+    if (unsupported.length > 0) {
+        throw new Error(
+            `On Windows, Cimon generates C/C++ SBOMs only; these inputs are ` +
+            `Linux-only: ${unsupported.join(', ')}.`
+        );
+    }
+}
+
+// Releases before the Windows agent shipped carry an attest-only cimon.exe.
+async function verifyWindowsAgent(releasePath) {
+    const retval = await exec.exec(releasePath, ['agent', '--help'], {
+        ignoreReturnCode: true,
+        silent: true,
+    });
+    if (retval !== 0) {
+        throw new Error(
+            `${releasePath} has no Windows agent. This cimon release is an ` +
+            `attest-only build; use a release that includes the Windows agent, ` +
+            `or set release-path to a cimon.exe that does.`
+        );
+    }
 }
 
 const httpClient = new http.HttpClient('cimon-action');
@@ -221,18 +268,20 @@ async function sudoExists() {
 }
 
 async function run(config) {
-    // The Cimon agent is built on eBPF and exists only for Linux. The
-    // Windows/macOS cimon releases are attest-only builds with no `agent`
-    // command, so bail out before downloading anything rather than
-    // failing later with `unknown command "agent" for "cimon-attest"`.
-    if (process.platform !== 'linux') {
+    // The Cimon agent runs on Linux (eBPF) and, for C/C++ SBOM generation
+    // only, on Windows (ETW). The macOS cimon release is an attest-only
+    // build with no `agent` command, so bail out before downloading
+    // anything rather than failing later with `unknown command "agent"`.
+    if (process.platform !== 'linux' && !IS_WINDOWS) {
         throw new Error(
-            `cimon-action runs the Cimon agent (runtime monitoring, hardening, ` +
-            `SBOM generation), which is built on eBPF and is Linux-only; this ` +
-            `runner is ${process.platform}. On Windows and macOS use the attest ` +
-            `sub-action (cycodelabs/cimon-action/attest@v1) for provenance and ` +
-            `SBOM attestation instead.`
+            `cimon-action runs the Cimon agent, which supports Linux and ` +
+            `Windows runners; this runner is ${process.platform}. On macOS ` +
+            `use the attest sub-action (cycodelabs/cimon-action/attest@v1) ` +
+            `for provenance and SBOM attestation instead.`
         );
+    }
+    if (IS_WINDOWS) {
+        verifyWindowsInputs(config);
     }
 
     let releasePath;
@@ -249,6 +298,11 @@ async function run(config) {
         }
 
         releasePath = config.cimon.releasePath;
+    } else if (IS_WINDOWS) {
+        // There is no Windows install script; download the release zip and
+        // verify it the same way as the Linux v1 binary.
+        const version = await getLatestV1Version();
+        releasePath = await downloadV1Binary(version);
     } else if (config.cimon.hardening) {
         // Hardening requires v1.x binary. Auto-download latest v1.x release.
         const version = await getLatestV1Version();
@@ -275,6 +329,14 @@ async function run(config) {
         }
 
         releasePath = CIMON_EXECUTABLE_PATH;
+    }
+
+    if (IS_WINDOWS) {
+        await verifyWindowsAgent(releasePath);
+        // MSBuild worker nodes otherwise outlive the build that started
+        // them, and a later build's links would run outside that build's
+        // process tree, where the agent cannot attribute them.
+        core.exportVariable('MSBUILDDISABLENODEREUSE', '1');
     }
 
     // Save release path so the post step uses the same binary for stop.
@@ -345,10 +407,12 @@ async function run(config) {
     }
 
     var retval;
-    const sudo = await sudoExists();
+    // GitHub-hosted Windows runners run elevated, which the Windows agent
+    // needs; there is no sudo. start-background itself detaches the agent.
+    const sudo = !IS_WINDOWS && (await sudoExists());
     const options = {
         env,
-        detached: true,
+        detached: !IS_WINDOWS,
         silent: false,
     };
 

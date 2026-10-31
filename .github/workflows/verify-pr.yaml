@@ -71,6 +71,29 @@ jobs:
           Get-Content provenance.intoto.jsonl
           Get-Item sbom.intoto.jsonl.sig | Select-Object FullName, Length
 
+  verify-agent-windows-inputs:
+    # On Windows the agent generates SBOMs only. Inputs for Linux-only
+    # features must fail the step before anything is downloaded.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
+
+      - name: Run Cimon with a Linux-only input
+        id: cimon
+        continue-on-error: true
+        uses: ./
+        with:
+          prevent: true
+          fail-on-error: true
+
+      - name: Check that the step failed without starting the agent
+        shell: pwsh
+        env:
+          OUTCOME: ${{ steps.cimon.outcome }}
+        run: |
+          if ($env:OUTCOME -ne 'failure') { throw "expected the Cimon step to fail, got $env:OUTCOME" }
+          if (Get-Process -Name cimon -ErrorAction SilentlyContinue) { throw 'the agent was started' }
+
   verify:
     runs-on: ubuntu-22.04
     steps:

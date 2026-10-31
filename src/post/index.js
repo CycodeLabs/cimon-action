@@ -67,17 +67,27 @@ function getCimonPath() {
 }
 
 async function run(config) {
-    // The main step refuses to start the agent on non-Linux runners (see
+    const isWindows = process.platform === 'win32';
+
+    // The main step refuses to start the agent on other runners (see
     // src/main/index.js), so there is nothing to stop here. Skip instead
     // of trying to download the Linux install script.
-    if (process.platform !== 'linux') {
+    if (process.platform !== 'linux' && !isWindows) {
         core.info(
-            `Cimon agent is Linux-only; nothing to stop on ${process.platform}`
+            `Cimon agent runs on Linux and Windows; nothing to stop on ${process.platform}`
         );
         return;
     }
 
     const cimonPath = getCimonPath();
+
+    // On Windows the main step saves the path of the cimon.exe it started,
+    // and there is no install script to fall back to. Without one, the main
+    // step stopped before starting the agent.
+    if (isWindows && !fs.existsSync(cimonPath)) {
+        core.info('Cimon agent was not started; nothing to stop');
+        return;
+    }
 
     // Ensure the Cimon binary is available (fallback: download from S3).
     if (!fs.existsSync(cimonPath)) {
@@ -122,7 +132,7 @@ async function run(config) {
     };
 
     var retval;
-    const sudo = await sudoExists();
+    const sudo = !isWindows && (await sudoExists());
 
     if (sudo) {
         retval = await exec.exec(

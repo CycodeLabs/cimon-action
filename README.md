@@ -23,16 +23,24 @@ Learn more about Cimon in our [docs](https://docs.cimon.build).
 | Runner OS | `cycodelabs/cimon-action` (agent) | `cycodelabs/cimon-action/attest` |
 | --------- | --------------------------------- | -------------------------------- |
 | Linux     | ✅                                | ✅                               |
-| Windows   | ❌                                | ✅                               |
+| Windows   | ✅ C/C++ SBOM generation only     | ✅                               |
 | macOS     | ❌                                | ✅                               |
 
-The agent deployed by this action (runtime monitoring, hardening, process and
-file reports, automatic SBOM generation and the `CIMON_SBOM_*` settings) is
-built on eBPF and runs **only on Linux runners**. On any other OS the action
-stops before installing anything and logs an explanatory error (the step
-fails with `fail-on-error: true`).
+On Linux the agent deployed by this action provides runtime monitoring,
+hardening, process and file reports, and automatic SBOM generation.
 
-The Windows and macOS releases of `cimon` are attest-only builds. Use the
+On Windows runners the agent generates C/C++ SBOMs for MSVC builds (CMake with
+Ninja or MSBuild, MSBuild solutions, and `cl`/`link` run directly), enabled
+with `CIMON_SBOM_ENABLED: true` as on Linux. The SBOMs appear in the job
+summary and the `cimon-sbom` artifact. It needs an elevated runner, which
+GitHub-hosted Windows runners are. The `prevent`, `hardening`,
+`file-integrity` and `memory-protection` inputs are Linux-only and fail the
+step on Windows. The action sets `MSBUILDDISABLENODEREUSE=1` for the rest of
+the job, so that every MSBuild link belongs to the build that started it.
+
+On macOS the action stops before installing anything and logs an explanatory
+error (the step fails with `fail-on-error: true`). The macOS release of
+`cimon` is an attest-only build: use the
 [attest sub-action](./attest/README.md) there to generate and sign SLSA
 provenance, and to sign an SBOM produced by another tool with
 `cimon attest sbom`.
