@@ -408,7 +408,9 @@ async function run(config) {
 
     var retval;
     // GitHub-hosted Windows runners run elevated, which the Windows agent
-    // needs; there is no sudo. start-background itself detaches the agent.
+    // needs; a self-hosted runner's account that is not an administrator
+    // needs the kernel provider grant the docs describe. There is no sudo.
+    // start-background itself detaches the agent.
     const sudo = !IS_WINDOWS && (await sudoExists());
     const options = {
         env,

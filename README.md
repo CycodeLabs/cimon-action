@@ -29,11 +29,17 @@ Learn more about Cimon in our [docs](https://docs.cimon.build).
 On Linux the agent deployed by this action provides runtime monitoring,
 hardening, process and file reports, and automatic SBOM generation.
 
-On Windows runners the agent generates C/C++ SBOMs for MSVC builds (CMake with
-Ninja or MSBuild, MSBuild solutions, and `cl`/`link` run directly), enabled
-with `CIMON_SBOM_ENABLED: true` as on Linux. The SBOMs appear in the job
-summary and the `cimon-sbom` artifact. It needs an elevated runner, which
-GitHub-hosted Windows runners are. The `prevent`, `hardening`,
+On Windows runners the agent generates C/C++ SBOMs for MSVC and clang-cl
+builds (CMake with Ninja, Visual Studio or NMake generators and with presets,
+MSBuild and Visual Studio (`devenv /build`) solutions, nmake, GNU make, Meson,
+and `cl`/`link` run directly), enabled with `CIMON_SBOM_ENABLED: true` as on
+Linux. The SBOMs appear in the job summary and the `cimon-sbom` artifact.
+GitHub-hosted Windows runners need no setup. On a self-hosted runner whose
+account is not an administrator, such as a runner service running as
+`NetworkService`, an administrator first grants that account access to the
+Windows kernel's event providers, once per machine: see
+[Windows Runners](https://docs.cimon.build/agent/overview/self-hosted#windows-runners).
+The `prevent`, `hardening`,
 `file-integrity` and `memory-protection` inputs are Linux-only and fail the
 step on Windows. The action sets `MSBUILDDISABLENODEREUSE=1` for the rest of
 the job, so that every MSBuild link belongs to the build that started it.
