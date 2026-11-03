@@ -43,6 +43,10 @@ inputs:
     description: Input path to a private ECDSA/RSA/ED25519 key used to sign provenance statement
     required: false
     default: ''
+  kms:
+    description: 'KMS key used to sign the provenance statement (and the SBOM attestation when sbom is set), as a provider URI. HashiCorp Vault transit: vault://<key-name>, with the Vault address and token in the VAULT_ADDR and VAULT_TOKEN environment variables. Requires cimon v1.0.28 or later.'
+    required: false
+    default: ''
   keyless:
     description: Allow keyless signature if no signing key is provided
     required: false
@@ -52,7 +56,7 @@ inputs:
     required: false
     default: 'true'
   include-timestamp:
-    description: 'Request an RFC 3161 timestamp of the artifact signature from a timestamping authority. Applies to keyless and sign-key signing.'
+    description: 'Request an RFC 3161 timestamp of the artifact signature from a timestamping authority. Applies to keyless, sign-key and kms signing.'
     required: false
     default: 'false'
   fulcio-server-url:
@@ -64,7 +68,7 @@ inputs:
     required: false
     default: 'https://rekor.sigstore.dev'
   timestamp-server-url:
-    description: 'RFC 3161 timestamp server URL: a Sigstore timestamp authority or a standard RFC 3161 service. With sign-key, forwarded only when include-timestamp is true.'
+    description: 'RFC 3161 timestamp server URL: a Sigstore timestamp authority or a standard RFC 3161 service. With sign-key or kms, forwarded only when include-timestamp is true.'
     required: false
   allow-submit-data-to-public-sigstore:
     description: 'Keyless signing only: agree to submit data to an immutable public transparency log (needed for public Sigstore). Ignored unless keyless is true.'
