@@ -44,6 +44,13 @@ The `prevent`, `hardening`,
 step on Windows. The action sets `MSBUILDDISABLENODEREUSE=1` for the rest of
 the job, so that every MSBuild link belongs to the build that started it.
 
+When a Windows job gets no SBOM, or the agent sees links outside the builds it
+follows, the job summary says why: the builds the agent followed and what each
+came to (for example, a build that was up to date links nothing), and the
+linker runs it could not place, with what started them. The agent's log is
+then kept as the `cimon-agent-log-<job>` artifact, as it is for every job
+with `log-level: debug`. That artifact is what a report of the problem needs.
+
 On macOS the action stops before installing anything and logs an explanatory
 error (the step fails with `fail-on-error: true`). The macOS release of
 `cimon` is an attest-only build: use the
