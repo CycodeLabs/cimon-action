@@ -127935,6 +127935,10 @@ async function uploadSBOMArtifacts(sbomEntries) {
         for (const filePath of [entry.cyclonedx, entry.spdx]) {
             if (filePath && fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(filePath)) {
                 filesToUpload.push(filePath);
+                // The agent's signature beside it (CIMON_SBOM_SIGN_ENABLED).
+                if (fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(filePath + '.sig')) {
+                    filesToUpload.push(filePath + '.sig');
+                }
             }
         }
     }
