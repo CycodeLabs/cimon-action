@@ -79,6 +79,10 @@ inputs:
     description: Fail the CI if Cimon encountered an error
     required: false
     default: 'false'
+  cimon-version:
+    description: A cimon release to download (a tag of CycodeLabs/cimon-releases, such as a release candidate) instead of the latest v1 release. Used on Windows and with hardening, and verified the same way. Ignored when release-path is set
+    required: false
+    default: ''
   release-path:
     description: Path to Cimon release file (Used for debugging)
     required: false

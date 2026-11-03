@@ -245,6 +245,7 @@ function getActionConfig() {
             url: core.getInput('url'),
             featureGates: core.getMultilineInput('feature-gates'),
             releasePath: core.getInput('release-path'),
+            version: core.getInput('cimon-version'),
             hardening: core.getInput('hardening') === 'true',
             hardeningTier: core.getInput('hardening-tier') || '2',
             hardeningDisabledRules: core.getInput('hardening-disabled-rules') || '',
@@ -300,12 +301,14 @@ async function run(config) {
         releasePath = config.cimon.releasePath;
     } else if (IS_WINDOWS) {
         // There is no Windows install script; download the release zip and
-        // verify it the same way as the Linux v1 binary.
-        const version = await getLatestV1Version();
+        // verify it the same way as the Linux v1 binary. cimon-version names
+        // another release, such as a release candidate, which the latest-v1
+        // lookup never picks.
+        const version = config.cimon.version || (await getLatestV1Version());
         releasePath = await downloadV1Binary(version);
     } else if (config.cimon.hardening) {
         // Hardening requires v1.x binary. Auto-download latest v1.x release.
-        const version = await getLatestV1Version();
+        const version = config.cimon.version || (await getLatestV1Version());
         releasePath = await downloadV1Binary(version);
     } else {
         core.info('Running Cimon from latest release path');
