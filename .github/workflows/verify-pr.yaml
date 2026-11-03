@@ -94,6 +94,43 @@ jobs:
           if ($env:OUTCOME -ne 'failure') { throw "expected the Cimon step to fail, got $env:OUTCOME" }
           if (Get-Process -Name cimon -ErrorAction SilentlyContinue) { throw 'the agent was started' }
 
+  verify-agent-windows-download:
+    # The download a Windows job makes without release-path: the latest v1
+    # release's zip, verified by the cosign signature on checksums.txt and
+    # its SHA-256, then unpacked. Until a release carries the Windows agent,
+    # the step then stops at the attest-only check; once one does, the
+    # agent starts.
+    runs-on: windows-latest
+    env:
+      CIMON_SBOM_ENABLED: 'true'
+      CIMON_FORCE_SENSORS: 'true'
+    steps:
+      - uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
+
+      - name: Run Cimon from the latest release
+        id: cimon
+        continue-on-error: true
+        uses: ./
+        with:
+          fail-on-error: true
+
+      - name: Check the release was downloaded, verified and unpacked
+        shell: pwsh
+        env:
+          OUTCOME: ${{ steps.cimon.outcome }}
+        run: |
+          $exe = Join-Path $env:RUNNER_TEMP 'cimon-v1\cimon.exe'
+          if (-not (Test-Path (Join-Path $env:RUNNER_TEMP 'cosign.exe'))) { throw 'cosign was not installed to verify the release' }
+          # The archive is unpacked only after its signature and digest check.
+          if (-not (Test-Path $exe)) { throw "the release was not unpacked to $exe" }
+          & $exe attest --help | Out-Null
+          if ($LASTEXITCODE) { throw "the release's cimon.exe does not run ($LASTEXITCODE)" }
+          & $exe agent --help 2>&1 | Out-Null
+          $hasAgent = $LASTEXITCODE -eq 0
+          Write-Host "The latest v1 release has the Windows agent: $hasAgent. The Cimon step's outcome: $env:OUTCOME"
+          if ($hasAgent -and $env:OUTCOME -ne 'success') { throw 'the release has the Windows agent, but the step failed' }
+          if (-not $hasAgent -and $env:OUTCOME -ne 'failure') { throw 'an attest-only release did not stop the step' }
+
   verify:
     runs-on: ubuntu-22.04
     steps:
