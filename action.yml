@@ -49,6 +49,10 @@ inputs:
     description: Report results through job summary output
     required: false
     default: 'true'
+  sbom-artifact-name:
+    description: Name of the artifact the generated SBOMs (and their signatures) are uploaded as. Give each job its own when several jobs of a workflow run generate SBOMs
+    required: false
+    default: 'cimon-sbom'
   report-pr-summary:
     description: Report results through PR comment
     required: false

@@ -165,7 +165,7 @@ async function run(config) {
     }
 
     // Upload SBOM files as artifacts (best-effort, never fails the workflow).
-    await uploadSBOMArtifacts(sbomEntries);
+    await uploadSBOMArtifacts(sbomEntries, core.getInput('sbom-artifact-name') || 'cimon-sbom');
 
     // Keep the agent's output as an artifact when the Windows agent explains
     // a problem, or at debug level, so that one file carries what a report
@@ -191,7 +191,7 @@ async function run(config) {
  *
  * Best-effort: errors are logged as warnings, never fail the workflow.
  */
-async function uploadSBOMArtifacts(sbomEntries) {
+async function uploadSBOMArtifacts(sbomEntries, artifactName) {
     if (!sbomEntries || sbomEntries.length === 0) return;
 
     // Collect all existing SBOM files from parsed entries.
@@ -245,7 +245,7 @@ async function uploadSBOMArtifacts(sbomEntries) {
     try {
         const artifact = new DefaultArtifactClient();
         const { id, size } = await artifact.uploadArtifact(
-            'cimon-sbom',
+            artifactName,
             filesToUpload,
             rootDir,
             { retentionDays: 90 }
