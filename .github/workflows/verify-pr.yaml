@@ -130,6 +130,8 @@ jobs:
           Write-Host "The latest v1 release has the Windows agent: $hasAgent. The Cimon step's outcome: $env:OUTCOME"
           if ($hasAgent -and $env:OUTCOME -ne 'success') { throw 'the release has the Windows agent, but the step failed' }
           if (-not $hasAgent -and $env:OUTCOME -ne 'failure') { throw 'an attest-only release did not stop the step' }
+          # The step's exit code is otherwise the last native command's: agent --help's.
+          exit 0
 
   verify:
     runs-on: ubuntu-22.04
