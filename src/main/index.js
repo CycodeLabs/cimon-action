@@ -286,22 +286,23 @@ async function run(config) {
     } else {
         core.info('Running Cimon from latest release path');
 
-        if (!fs.existsSync(CIMON_SCRIPT_PATH)) {
-            await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
-        }
+        // Install fresh on every run. Reusing an existing /tmp/cimon would
+        // run whatever release an earlier job left there on a persistent
+        // self-hosted runner, not the latest one.
+        fs.rmSync(CIMON_EXECUTABLE_DIR, { recursive: true, force: true });
+        fs.rmSync(CIMON_SCRIPT_PATH, { force: true });
+        await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
 
-        if (!fs.existsSync(CIMON_EXECUTABLE_DIR)) {
-            let params = [CIMON_SCRIPT_PATH, '-b', CIMON_EXECUTABLE_DIR];
-            if (
-                config.cimon.logLevel == 'debug' ||
-                config.cimon.logLevel == 'trace'
-            ) {
-                params.push('-d');
-            }
-            let retval = await exec.exec('sh', params);
-            if (retval !== 0) {
-                throw new Error(`Failed installing Cimon: ${retval}`);
-            }
+        let params = [CIMON_SCRIPT_PATH, '-b', CIMON_EXECUTABLE_DIR];
+        if (
+            config.cimon.logLevel == 'debug' ||
+            config.cimon.logLevel == 'trace'
+        ) {
+            params.push('-d');
+        }
+        let retval = await exec.exec('sh', params);
+        if (retval !== 0) {
+            throw new Error(`Failed installing Cimon: ${retval}`);
         }
 
         releasePath = CIMON_EXECUTABLE_PATH;

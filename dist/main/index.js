@@ -28047,22 +28047,23 @@ async function run(config) {
     } else {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running Cimon from latest release path');
 
-        if (!fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(CIMON_SCRIPT_PATH)) {
-            await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
-        }
+        // Install fresh on every run. Reusing an existing /tmp/cimon would
+        // run whatever release an earlier job left there on a persistent
+        // self-hosted runner, not the latest one.
+        fs__WEBPACK_IMPORTED_MODULE_2__.rmSync(CIMON_EXECUTABLE_DIR, { recursive: true, force: true });
+        fs__WEBPACK_IMPORTED_MODULE_2__.rmSync(CIMON_SCRIPT_PATH, { force: true });
+        await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
 
-        if (!fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(CIMON_EXECUTABLE_DIR)) {
-            let params = [CIMON_SCRIPT_PATH, '-b', CIMON_EXECUTABLE_DIR];
-            if (
-                config.cimon.logLevel == 'debug' ||
-                config.cimon.logLevel == 'trace'
-            ) {
-                params.push('-d');
-            }
-            let retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sh', params);
-            if (retval !== 0) {
-                throw new Error(`Failed installing Cimon: ${retval}`);
-            }
+        let params = [CIMON_SCRIPT_PATH, '-b', CIMON_EXECUTABLE_DIR];
+        if (
+            config.cimon.logLevel == 'debug' ||
+            config.cimon.logLevel == 'trace'
+        ) {
+            params.push('-d');
+        }
+        let retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sh', params);
+        if (retval !== 0) {
+            throw new Error(`Failed installing Cimon: ${retval}`);
         }
 
         releasePath = CIMON_EXECUTABLE_PATH;

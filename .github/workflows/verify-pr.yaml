@@ -107,6 +107,15 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
 
+      # A binary an earlier job left at the install path must not be reused:
+      # without a version the action installs the latest release every run.
+      # If it ran this one, starting the agent would fail the next step.
+      - name: Leave a stale binary at the install path
+        run: |
+          mkdir -p /tmp/cimon
+          printf '#!/bin/sh\necho "stale binary was reused" >&2\nexit 1\n' > /tmp/cimon/cimon
+          chmod +x /tmp/cimon/cimon
+
       - name: Run Cimon
         uses: ./
         with:
