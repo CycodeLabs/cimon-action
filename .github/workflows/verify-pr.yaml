@@ -71,6 +71,36 @@ jobs:
           Get-Content provenance.intoto.jsonl
           Get-Item sbom.intoto.jsonl.sig | Select-Object FullName, Length
 
+  verify-attest-macos:
+    # On macOS the attest action downloads the latest release, verifies the
+    # cosign signature on its checksums.txt and the archive's SHA256, then
+    # runs it. Keyed signing, as on Windows.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
+
+      - name: Build sample artifact and signing key
+        run: |
+          mkdir -p dist
+          echo "fake-macos-binary-$(date -u +%s)" > dist/sample
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out private-key.pem
+
+      - name: Cimon Attest (macOS, keyed)
+        uses: ./attest
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret:    ${{ secrets.CIMON_SECRET }}
+          subjects:  dist/sample
+          sign-key:  private-key.pem
+          report-job-summary: true
+          report-artifact:    false
+          fail-on-error:      true
+
+      - name: Show provenance
+        run: |
+          cat provenance.intoto.jsonl
+          ls -l provenance.intoto.jsonl.sig
+
   verify:
     runs-on: ubuntu-22.04
     steps:
@@ -201,3 +231,125 @@ jobs:
           curl -I https://api.github.com
           curl -I https://cycode.com
           wget --quiet --timeout 1 https://registry.npmjs.org || true
+
+  # The version input pins the Cimon release instead of running the latest
+  # one. PINNED_VERSION is deliberately older than the latest release, and
+  # each job compares the binary the action ran with the one in that
+  # release, so the test fails if the action falls back to the latest.
+  verify-pinned-version:
+    runs-on: ubuntu-22.04
+    env:
+      PINNED_VERSION: v1.0.27
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
+
+      - name: Run Cimon (pinned)
+        uses: ./
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
+          version: ${{ env.PINNED_VERSION }}
+          fail-on-error: true
+
+      # The action starts the agent from /tmp/cimon-v1/cimon after verifying
+      # it, and fail-on-error fails the previous step if the start fails.
+      - name: Check the pinned binary ran
+        run: |
+          curl -sSfL -o expected.tar.gz \
+            "https://github.com/CycodeLabs/cimon-releases/releases/download/${PINNED_VERSION}/cimon_linux_x86_64.tar.gz"
+          mkdir expected && tar -xzf expected.tar.gz -C expected
+          cmp expected/cimon /tmp/cimon-v1/cimon
+
+  verify-attest-pinned-linux:
+    runs-on: ubuntu-22.04
+    env:
+      PINNED_VERSION: v1.0.27
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
+
+      - name: Create Private Key and Artifact
+        run: |
+          openssl genrsa -out private-key.pem 3072
+          echo artifact > artifact.txt
+
+      - name: Run Cimon Attest (pinned)
+        id: attest
+        uses: ./attest
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
+          subjects: artifact.txt
+          sign-key: private-key.pem
+          version: ${{ env.PINNED_VERSION }}
+          report-artifact: false
+          fail-on-error: true
+
+      - name: Check the pinned binary ran
+        env:
+          CIMON_RAN: ${{ steps.attest.outputs.cimon-path }}
+        run: |
+          curl -sSfL -o expected.tar.gz \
+            "https://github.com/CycodeLabs/cimon-releases/releases/download/${PINNED_VERSION}/cimon_linux_x86_64.tar.gz"
+          mkdir expected && tar -xzf expected.tar.gz -C expected
+          cmp expected/cimon "$CIMON_RAN"
+
+      - name: Run Cimon Attest with both release-path and version
+        id: conflict
+        continue-on-error: true
+        uses: ./attest
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
+          subjects: artifact.txt
+          sign-key: private-key.pem
+          release-path: ${{ steps.attest.outputs.cimon-path }}
+          version: ${{ env.PINNED_VERSION }}
+          report-artifact: false
+          fail-on-error: true
+
+      - name: Check that combination was rejected
+        if: steps.conflict.outcome != 'failure'
+        run: |
+          echo "::error::release-path together with version should fail the step"
+          exit 1
+
+  verify-attest-pinned-windows:
+    runs-on: windows-latest
+    env:
+      PINNED_VERSION: v1.0.27
+    steps:
+      - uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
+
+      - name: Build sample Windows artifact and signing key
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Set-Content -Path dist/sample.exe -Value "fake-windows-binary-$(Get-Date -Format o)"
+          & "C:\Program Files\Git\usr\bin\openssl.exe" genrsa -out private-key.pem 3072
+
+      # The leading "v" is optional; leaving it out also tests that.
+      - name: Cimon Attest (Windows, pinned)
+        id: attest
+        uses: ./attest
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret:    ${{ secrets.CIMON_SECRET }}
+          subjects:  dist\sample.exe
+          sign-key:  private-key.pem
+          version:   1.0.27
+          report-artifact: false
+          fail-on-error:   true
+
+      - name: Check the pinned binary ran
+        shell: pwsh
+        env:
+          CIMON_RAN: ${{ steps.attest.outputs.cimon-path }}
+        run: |
+          $url = "https://github.com/CycodeLabs/cimon-releases/releases/download/$env:PINNED_VERSION/cimon_windows_x86_64.zip"
+          Invoke-WebRequest $url -OutFile expected.zip
+          Expand-Archive expected.zip -DestinationPath expected
+          $want = (Get-FileHash expected\cimon.exe -Algorithm SHA256).Hash
+          $got  = (Get-FileHash $env:CIMON_RAN -Algorithm SHA256).Hash
+          if ($want -ne $got) { throw "the action ran $got, expected $env:PINNED_VERSION ($want)" }

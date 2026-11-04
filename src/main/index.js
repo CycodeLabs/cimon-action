@@ -2,15 +2,20 @@ import core from '@actions/core';
 import exec from '@actions/exec';
 import fs from 'fs';
 import * as http from '@actions/http-client';
+import {
+    CIMON_COSIGN_PUBLIC_KEY,
+    COSIGN_SHA256,
+    checksumFor,
+    COSIGN_VERSION,
+    sha256File,
+} from '../common/install.js';
+import { CIMON_RELEASES_URL, resolveRelease } from '../common/release.js';
 
 const CIMON_SCRIPT_DOWNLOAD_URL =
     'https://cimon-releases.s3.amazonaws.com/install.sh';
 const CIMON_SCRIPT_PATH = '/tmp/install.sh';
 const CIMON_EXECUTABLE_DIR = '/tmp/cimon';
 const CIMON_EXECUTABLE_PATH = '/tmp/cimon/cimon';
-
-// For v1+, download a specific version from GitHub releases instead of S3 latest.
-const CIMON_RELEASES_GITHUB = 'https://github.com/CycodeLabs/cimon-releases/releases';
 
 async function getLatestV1Version() {
     // Paginate through releases to find the latest v1.x tag.
@@ -39,14 +44,24 @@ async function getLatestV1Version() {
 }
 
 async function installCosign() {
-    // Download cosign binary for signature verification.
-    const cosignVersion = 'v2.2.1';
-    const cosignUrl = `https://github.com/sigstore/cosign/releases/download/${cosignVersion}/cosign-linux-amd64`;
+    // Download cosign for signature verification, pinned by version and
+    // SHA256. A cosign already at this path (from an earlier step or job on
+    // a persistent runner) is reused only if it is the pinned binary.
+    const name = `cosign-linux-${process.arch === 'arm64' ? 'arm64' : 'amd64'}`;
+    const expected = COSIGN_SHA256[name];
+    const cosignUrl = `https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/${name}`;
     const cosignPath = '/tmp/cosign';
 
-    if (!fs.existsSync(cosignPath)) {
-        core.info(`Installing cosign ${cosignVersion}...`);
+    if (!fs.existsSync(cosignPath) || (await sha256File(cosignPath)) !== expected) {
+        core.info(`Installing cosign ${COSIGN_VERSION}...`);
         await downloadBinaryToFile(cosignUrl, cosignPath);
+        const actual = await sha256File(cosignPath);
+        if (actual !== expected) {
+            throw new Error(
+                `SHA256 mismatch for ${name} ${COSIGN_VERSION}: expected ` +
+                    `${expected}, got ${actual}. Refusing to run it.`
+            );
+        }
         fs.chmodSync(cosignPath, 0o755);
     }
     return cosignPath;
@@ -54,14 +69,24 @@ async function installCosign() {
 
 async function downloadV1Binary(version) {
     const arch = process.arch === 'arm64' ? 'arm64' : 'x86_64';
-    const baseUrl = `${CIMON_RELEASES_GITHUB}/download/${version}`;
+    const baseUrl = `${CIMON_RELEASES_URL}/download/${version}`;
     const tarName = `cimon_linux_${arch}.tar.gz`;
     const tarPath = '/tmp/cimon-v1.tar.gz';
     const checksumPath = '/tmp/cimon-v1-checksums.txt';
     const checksumSigPath = '/tmp/cimon-v1-checksums.txt.sig';
 
     core.info(`Downloading cimon ${version} for ${arch}...`);
-    await downloadBinaryToFile(`${baseUrl}/${tarName}`, tarPath);
+    try {
+        await downloadBinaryToFile(`${baseUrl}/${tarName}`, tarPath);
+    } catch (error) {
+        // A missing tarball is almost always a mistyped or unpublished
+        // version; say so before the signature check reports it as an
+        // unsigned release.
+        throw new Error(
+            `Could not download cimon ${version} (${error.message}). Check ` +
+                `that ${version} is a published release at ${CIMON_RELEASES_URL}.`
+        );
+    }
     await downloadToFile(`${baseUrl}/checksums.txt`, checksumPath);
 
     // Step 1: Verify cosign signature on checksums.txt.
@@ -89,18 +114,10 @@ async function downloadV1Binary(version) {
 
     const cosignPath = await installCosign();
 
-    // The public key is embedded directly in code — not downloaded
-    // from the release (which an attacker could replace).
-    // This is Cycode's cosign public key (cosign generate-key-pair).
-    const COSIGN_PUB = [
-        '-----BEGIN PUBLIC KEY-----',
-        'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEm1mmcCICdlB5j78efKNbPK8Q0UeO',
-        'rDH1UNxhD2ibPuzUDV3OzpL8wVtTnWW1jLGMi7fKiZPfP+pB2BpdUPaMSg==',
-        '-----END PUBLIC KEY-----',
-        '',
-    ].join('\n');
+    // The public key ships inside the action, not with the release (which
+    // an attacker could replace).
     const pubKeyPath = '/tmp/cimon-cosign-verify.pub';
-    fs.writeFileSync(pubKeyPath, COSIGN_PUB);
+    fs.writeFileSync(pubKeyPath, CIMON_COSIGN_PUBLIC_KEY);
 
     core.info('Verifying cosign signature...');
     const verifyResult = await exec.exec(cosignPath, [
@@ -123,10 +140,7 @@ async function downloadV1Binary(version) {
     // Step 2: Verify SHA256 checksum of the binary.
     core.info('Verifying SHA256 checksum...');
     const checksumContent = fs.readFileSync(checksumPath, 'utf8');
-    const expectedHash = checksumContent
-        .split('\n')
-        .filter(line => line.includes(tarName))
-        .map(line => line.split(/\s+/)[0])[0];
+    const expectedHash = checksumFor(checksumContent, tarName);
 
     if (!expectedHash) {
         throw new Error(`Checksum not found for ${tarName} in checksums.txt`);
@@ -168,6 +182,10 @@ async function downloadToFile(url, filePath) {
 async function downloadBinaryToFile(url, filePath) {
     const response = await httpClient.get(url);
     const message = response.message;
+    if (message.statusCode !== 200) {
+        message.resume();
+        throw new Error(`HTTP ${message.statusCode} from ${url}`);
+    }
     const chunks = [];
     await new Promise((resolve, reject) => {
         message.on('data', (chunk) => chunks.push(chunk));
@@ -198,6 +216,7 @@ function getActionConfig() {
             url: core.getInput('url'),
             featureGates: core.getMultilineInput('feature-gates'),
             releasePath: core.getInput('release-path'),
+            version: core.getInput('version'),
             hardening: core.getInput('hardening') === 'true',
             hardeningTier: core.getInput('hardening-tier') || '2',
             hardeningDisabledRules: core.getInput('hardening-disabled-rules') || '',
@@ -235,20 +254,35 @@ async function run(config) {
         );
     }
 
+    const release = resolveRelease(
+        config.cimon.releasePath,
+        config.cimon.version
+    );
     let releasePath;
 
-    if (config.cimon.releasePath != '') {
-        core.info(
-            `Running Cimon from release path: ${config.cimon.releasePath}`
-        );
+    if (release.releasePath !== '') {
+        core.info(`Running Cimon from release path: ${release.releasePath}`);
 
-        if (!fs.existsSync(config.cimon.releasePath)) {
+        if (!fs.existsSync(release.releasePath)) {
             throw new Error(
-                `Cimon release path does not exist: ${config.cimon.releasePath}`
+                `Cimon release path does not exist: ${release.releasePath}`
             );
         }
 
-        releasePath = config.cimon.releasePath;
+        releasePath = release.releasePath;
+    } else if (release.version !== '') {
+        // A pinned version always takes the verified download (cosign
+        // signature on checksums.txt, then SHA256 of the tarball), with or
+        // without hardening. It also skips install.sh, so nothing fetched at
+        // run time decides which binary runs.
+        if (!release.version.startsWith('v1.')) {
+            throw new Error(
+                `version ${release.version} is not supported: this action ` +
+                    `runs cimon v1.x releases.`
+            );
+        }
+        core.info(`Running Cimon ${release.version} (pinned by the version input)`);
+        releasePath = await downloadV1Binary(release.version);
     } else if (config.cimon.hardening) {
         // Hardening requires v1.x binary. Auto-download latest v1.x release.
         const version = await getLatestV1Version();

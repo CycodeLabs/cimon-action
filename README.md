@@ -71,6 +71,8 @@ The action supports the following parameters:
 | `hardening`              | `false`               | Enable hardening rules engine to detect/prevent CI/CD supply chain attacks                                                                                                                                                                                                                                                                                                |
 | `hardening-tier`         | `2`                   | Maximum hardening tier: 1 = critical only, 2 = critical + high (default), 3 = all rules                                                                                                                                                                                                                                                                                  |
 | `hardening-disabled-rules` |                     | Comma-separated list of hardening rule IDs to disable                                                                                                                                                                                                                                                                                                                     |
+| `version`                |                       | Cimon release to run, as a tag from [cimon-releases](https://github.com/CycodeLabs/cimon-releases/releases) (for example `v1.0.28`). Empty or `latest` runs the latest release. The download is checked against the release's signed checksums. Requires a v1.x release. See [Pinning the Cimon version](#pinning-the-cimon-version) |
+| `release-path`           |                       | Path to a Cimon binary already on the runner. The action runs it and downloads nothing. Cannot be combined with `version` |
 
 ## ⚙️ Scenarios
 
@@ -113,6 +115,21 @@ steps:
           prevent: true
           hardening: true
 ```
+
+### Pinning the Cimon version
+
+By default the action runs the latest Cimon release, which it looks up each time the job runs. Set `version` to a tag from [cimon-releases](https://github.com/CycodeLabs/cimon-releases/releases) to keep running that release until you change it:
+
+```yaml
+steps:
+    - uses: cycodelabs/cimon-action@v1
+      with:
+          version: v1.0.28
+```
+
+The action checks the download against the release's signed checksums before running it. To run a binary you have scanned and staged yourself, set `release-path` to its location instead, and the action downloads nothing.
+
+Pinning the action itself (`@v1`, a release tag, or a commit SHA) does not pin the Cimon binary: without `version` or `release-path`, every run uses the latest release.
 
 ### Running Cimon with enhanced Cycode capabiltiies
 
