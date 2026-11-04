@@ -133,6 +133,99 @@ jobs:
           # The step's exit code is otherwise the last native command's: agent --help's.
           exit 0
 
+  verify-agent-windows-rc:
+    # A Windows job as a customer tests a release candidate: the action
+    # downloads it by cimon-version, verified like a release, and starts the
+    # agent, authenticated, with keyless SBOM signing; a CMake build with MSVC
+    # and Ninja then gets a signed SBOM. verify-agent-windows-rc-artifacts
+    # checks what the job left behind.
+    runs-on: windows-2022
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      CIMON_RC: v1.0.30-rc-windows-1
+      CIMON_SBOM_ENABLED: 'true'
+      CIMON_SBOM_SIGN_ENABLED: 'true'
+      CIMON_KEYLESS: 'true'
+      CIMON_ALLOW_SUBMIT: 'true'
+    steps:
+      - uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
+
+      - name: Start Cimon from the release candidate
+        uses: ./
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
+          cimon-version: ${{ env.CIMON_RC }}
+          log-level: debug
+          fail-on-error: true
+          sbom-artifact-name: cimon-sbom-rc
+
+      - name: Build a C++ program with CMake and Ninja
+        shell: pwsh
+        run: |
+          $src = Join-Path $env:RUNNER_TEMP 'sample'
+          New-Item -ItemType Directory -Force -Path $src | Out-Null
+          Set-Content -Path (Join-Path $src 'CMakeLists.txt') -Value @(
+            'cmake_minimum_required(VERSION 3.21)',
+            'project(sample CXX)',
+            'add_executable(sample main.cpp)',
+            'target_link_libraries(sample PRIVATE ws2_32)'
+          )
+          Set-Content -Path (Join-Path $src 'main.cpp') -Value @(
+            '#include <winsock2.h>',
+            '#include <cstdio>',
+            'int main() { WSADATA d; std::printf("%d\n", WSAStartup(MAKEWORD(2, 2), &d)); return 0; }'
+          )
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          cmd /c "`"$(Join-Path $vs 'VC\Auxiliary\Build\vcvarsall.bat')`" x64 >nul && set" | ForEach-Object {
+            if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2]) }
+          }
+          if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) {
+            python -m pip install --quiet ninja
+            $env:PATH = (python -c "import ninja; print(ninja.BIN_DIR)") + ";$env:PATH"
+          }
+          $build = Join-Path $env:RUNNER_TEMP 'sample-build'
+          cmake -S $src -B $build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          if ($LASTEXITCODE) { throw "configure failed ($LASTEXITCODE)" }
+          cmake --build $build
+          if ($LASTEXITCODE) { throw "build failed ($LASTEXITCODE)" }
+
+  verify-agent-windows-rc-artifacts:
+    needs: verify-agent-windows-rc
+    runs-on: ubuntu-22.04
+    env:
+      CIMON_RC: v1.0.30-rc-windows-1
+    steps:
+      - name: Download what the job left
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: '{cimon-sbom-rc,cimon-agent-log-verify-agent-windows-rc}'
+          path: left
+
+      - name: Check the release candidate's agent, its SBOM and signatures
+        run: |
+          find left -type f
+          cdx=$(find left/cimon-sbom-rc -name sbom.cdx.json | head -1)
+          spdx=$(find left/cimon-sbom-rc -name sbom.spdx.json | head -1)
+          log=$(find left/cimon-agent-log-verify-agent-windows-rc -name cimon-agent.log | head -1)
+          [ -n "$cdx" ] && [ -n "$spdx" ] || { echo "::error::no SBOM in the artifact"; exit 1; }
+          [ -f "$cdx.sig" ] && [ -f "$spdx.sig" ] || { echo "::error::the SBOM signatures are missing"; exit 1; }
+          jq -e '.metadata.component.name == "sample.exe" or ([.components[].name] | index("sample.exe"))' "$cdx" > /dev/null \
+            || { echo "::error::the SBOM does not describe sample.exe"; exit 1; }
+          jq -e '[.components[].name] | (index("windows-sdk") != null) and (index("vc-runtime") != null)' "$cdx" > /dev/null \
+            || { echo "::error::the SBOM lacks the Windows SDK or the MSVC runtime"; exit 1; }
+          version=$(grep -h '"Cimon started successfully"' "$log" | jq -r '.version' | head -1)
+          [ "$version" = "$CIMON_RC" ] || { echo "::error::the agent was $version, not $CIMON_RC"; exit 1; }
+          signed=$(grep -h '"SBOMs signed"' "$log" | jq -r '.signatures' | tail -1)
+          [ "$signed" = "2" ] || { echo "::error::the agent signed $signed SBOMs, not 2"; exit 1; }
+          grep -q '"Successfully authenticated"' "$log" || { echo "::error::the agent did not authenticate"; exit 1; }
+          hint=$(grep -h '"message":"SBOM diagnosis"' "$log" | jq -r '.hint' | tail -1)
+          [ -z "$hint" ] || { echo "::error::the diagnosis has a hint: $hint"; exit 1; }
+          echo "The release candidate $version wrote and signed the SBOM of sample.exe ($(jq '.components | length' "$cdx") components)."
+
   verify:
     runs-on: ubuntu-22.04
     steps:
