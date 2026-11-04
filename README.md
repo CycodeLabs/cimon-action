@@ -32,8 +32,8 @@ hardening, process and file reports, and automatic SBOM generation.
 On Windows runners the agent generates C/C++ SBOMs for MSVC and clang-cl
 builds (CMake with Ninja, Visual Studio or NMake generators and with presets,
 MSBuild and Visual Studio (`devenv /build`) solutions, nmake, GNU make, Meson,
-and `cl`/`link` run directly), enabled with `CIMON_SBOM_ENABLED: true` as on
-Linux. The SBOMs appear in the job summary and the `cimon-sbom` artifact.
+and `cl`/`link` run directly), enabled with `CIMON_SBOM_ENABLED: true` and the
+`client-id` and `secret` inputs, as on Linux. The SBOMs appear in the job summary and the `cimon-sbom` artifact.
 GitHub-hosted Windows runners need no setup. On a self-hosted runner whose
 account is not an administrator, such as a runner service running as
 `NetworkService`, an administrator first grants that account access to the
