@@ -31,15 +31,38 @@ export function parseVersion(input) {
 // resolveRelease reads the release-path and version inputs together and
 // returns { releasePath, version }, where version is a normalized tag or ''
 // for the latest release. The two inputs select the binary in different ways,
-// so setting both is an error rather than a silent precedence rule.
+// so setting both is an error rather than a silent precedence rule. That
+// includes `version: latest`, which asks for a download as much as a tag does.
 export function resolveRelease(releasePathInput, versionInput) {
     const releasePath = (releasePathInput || '').trim();
     const version = parseVersion(versionInput);
-    if (releasePath !== '' && version !== '') {
+    const versionSet = (versionInput || '').trim() !== '';
+    if (releasePath !== '' && versionSet) {
         throw new Error(
             'Set either release-path or version, not both. release-path runs ' +
                 'a binary already on the runner; version downloads that release.'
         );
     }
     return { releasePath, version };
+}
+
+// A stable v1 tag: v1.x.y with no pre-release suffix.
+const STABLE_V1_TAG = /^v1\.\d+\.\d+$/;
+
+// pickLatestV1 returns the first stable v1 tag in a page of the GitHub
+// releases API (newest first), or ''. "Latest" is not taken from GitHub's
+// /releases/latest, because v0 releases are still published from the v0
+// line and GitHub marks the newest one as latest.
+export function pickLatestV1(releases) {
+    for (const release of releases || []) {
+        if (
+            release &&
+            !release.draft &&
+            typeof release.tag_name === 'string' &&
+            STABLE_V1_TAG.test(release.tag_name)
+        ) {
+            return release.tag_name;
+        }
+    }
+    return '';
 }

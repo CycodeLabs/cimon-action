@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseVersion, resolveRelease } from './release.js';
+import { parseVersion, pickLatestV1, resolveRelease } from './release.js';
 
 describe('parseVersion', () => {
     it('treats empty and latest as the latest release', () => {
@@ -54,7 +54,7 @@ describe('resolveRelease', () => {
             releasePath: '/opt/cimon/cimon',
             version: '',
         });
-        assert.deepEqual(resolveRelease('/opt/cimon/cimon', 'latest'), {
+        assert.deepEqual(resolveRelease('/opt/cimon/cimon', '  '), {
             releasePath: '/opt/cimon/cimon',
             version: '',
         });
@@ -65,5 +65,35 @@ describe('resolveRelease', () => {
             () => resolveRelease('C:\\Tools\\cimon\\cimon.exe', 'v1.0.28'),
             /either release-path or version/
         );
+    });
+
+    it('rejects release-path together with version: latest', () => {
+        for (const latest of ['latest', 'LATEST']) {
+            assert.throws(
+                () => resolveRelease('/opt/cimon/cimon', latest),
+                /either release-path or version/
+            );
+        }
+    });
+});
+
+describe('pickLatestV1', () => {
+    it('returns the newest stable v1 tag', () => {
+        assert.equal(
+            pickLatestV1([
+                { tag_name: 'v1.0.30-rc-windows-1', prerelease: true },
+                { tag_name: 'v0.12.5' },
+                { tag_name: 'v1.0.29', draft: true },
+                { tag_name: 'v1.0.28' },
+                { tag_name: 'v1.0.27' },
+            ]),
+            'v1.0.28'
+        );
+    });
+
+    it('returns empty when the page has no stable v1 tag', () => {
+        assert.equal(pickLatestV1([{ tag_name: 'v0.12.4' }, { tag_name: 'v1.0.30-rc1' }]), '');
+        assert.equal(pickLatestV1([]), '');
+        assert.equal(pickLatestV1(null), '');
     });
 });

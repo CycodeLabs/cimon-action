@@ -7,7 +7,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { installRelease } from '../src/common/install.js';
-import { resolveRelease } from '../src/common/release.js';
+import { pickLatestV1, resolveRelease } from '../src/common/release.js';
 
 const IS_WINDOWS = process.platform === 'win32';
 
@@ -38,7 +38,7 @@ const CIMON_EXECUTABLE_PATH = path.join(CIMON_EXECUTABLE_DIR, 'cimon');
 // GitHub release and verify it before running it (see
 // src/common/install.js).
 const CIMON_RELEASES_API =
-    'https://api.github.com/repos/cycodelabs/cimon-releases/releases/latest';
+    'https://api.github.com/repos/cycodelabs/cimon-releases/releases';
 
 const httpClient = new http.HttpClient('cimon-action');
 
@@ -65,7 +65,8 @@ function apiTokenFor(githubToken) {
     return host === 'github.com' ? githubToken : '';
 }
 
-// latestTag looks up the latest cimon release on api.github.com.
+// latestTag looks up the newest stable v1 cimon release on api.github.com
+// (see pickLatestV1 for why GitHub's own "latest" is not used).
 //
 // Without a token the lookup uses the unauthenticated REST limit (60
 // req/IP/hour), which busy self-hosted fleets behind a shared egress IP can
@@ -85,14 +86,21 @@ async function latestTag(githubToken) {
         );
     }
 
-    const latest = await httpClient.getJson(CIMON_RELEASES_API, headers);
-    const tag = latest.result && latest.result.tag_name;
-    if (!tag) {
-        throw new Error(
-            'Failed resolving latest cimon-releases tag (no tag_name in API response)'
+    for (let page = 1; page <= 5; page++) {
+        const response = await httpClient.getJson(
+            `${CIMON_RELEASES_API}?per_page=100&page=${page}`,
+            headers
         );
+        const releases = response.result;
+        if (!Array.isArray(releases) || releases.length === 0) {
+            break;
+        }
+        const tag = pickLatestV1(releases);
+        if (tag) {
+            return tag;
+        }
     }
-    return tag;
+    throw new Error('No v1.x release found on cimon-releases');
 }
 
 // installVerified installs cimon release `version` (or the latest release

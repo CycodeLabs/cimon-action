@@ -27683,7 +27683,8 @@ async function installRelease({
 
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
 /* harmony export */   "GW": () => (/* binding */ CIMON_RELEASES_URL),
-/* harmony export */   "U": () => (/* binding */ resolveRelease)
+/* harmony export */   "U": () => (/* binding */ resolveRelease),
+/* harmony export */   "UP": () => (/* binding */ pickLatestV1)
 /* harmony export */ });
 /* unused harmony export parseVersion */
 // Release selection shared by the agent action (src/main) and the attest
@@ -27719,17 +27720,40 @@ function parseVersion(input) {
 // resolveRelease reads the release-path and version inputs together and
 // returns { releasePath, version }, where version is a normalized tag or ''
 // for the latest release. The two inputs select the binary in different ways,
-// so setting both is an error rather than a silent precedence rule.
+// so setting both is an error rather than a silent precedence rule. That
+// includes `version: latest`, which asks for a download as much as a tag does.
 function resolveRelease(releasePathInput, versionInput) {
     const releasePath = (releasePathInput || '').trim();
     const version = parseVersion(versionInput);
-    if (releasePath !== '' && version !== '') {
+    const versionSet = (versionInput || '').trim() !== '';
+    if (releasePath !== '' && versionSet) {
         throw new Error(
             'Set either release-path or version, not both. release-path runs ' +
                 'a binary already on the runner; version downloads that release.'
         );
     }
     return { releasePath, version };
+}
+
+// A stable v1 tag: v1.x.y with no pre-release suffix.
+const STABLE_V1_TAG = /^v1\.\d+\.\d+$/;
+
+// pickLatestV1 returns the first stable v1 tag in a page of the GitHub
+// releases API (newest first), or ''. "Latest" is not taken from GitHub's
+// /releases/latest, because v0 releases are still published from the v0
+// line and GitHub marks the newest one as latest.
+function pickLatestV1(releases) {
+    for (const release of releases || []) {
+        if (
+            release &&
+            !release.draft &&
+            typeof release.tag_name === 'string' &&
+            STABLE_V1_TAG.test(release.tag_name)
+        ) {
+            return release.tag_name;
+        }
+    }
+    return '';
 }
 
 
@@ -27759,27 +27783,19 @@ const CIMON_EXECUTABLE_DIR = '/tmp/cimon';
 const CIMON_EXECUTABLE_PATH = '/tmp/cimon/cimon';
 
 async function getLatestV1Version() {
-    // Paginate through releases to find the latest v1.x tag.
-    // GitHub returns 30 per page by default; use 100 and check up to 5 pages.
+    // Page through releases (newest first) for the newest stable v1.x tag.
+    // GitHub's own "latest" is not used: v0 releases are still published
+    // from the v0 line, and release candidates (vX.Y.Z-rc...) are skipped.
     const baseUrl = 'https://api.github.com/repos/CycodeLabs/cimon-releases/releases';
     for (let page = 1; page <= 5; page++) {
         const response = await httpClient.getJson(
             `${baseUrl}?per_page=100&page=${page}`
         );
         const releases = response.result;
-        if (!releases || releases.length === 0) break;
+        if (!Array.isArray(releases) || releases.length === 0) break;
 
-        for (const release of releases) {
-            // Match v1.x.y but skip v1.x.y-rc1, v1.x.y-alpha, etc.
-            // Pre-releases on GitHub are fine (our release workflow marks
-            // all v1.x as pre-release to not override v0 latest).
-            if (release.tag_name &&
-                release.tag_name.startsWith('v1.') &&
-                !release.draft &&
-                !release.tag_name.includes('-')) {
-                return release.tag_name;
-            }
-        }
+        const tag = (0,_common_release_js__WEBPACK_IMPORTED_MODULE_5__/* .pickLatestV1 */ .UP)(releases);
+        if (tag) return tag;
     }
     throw new Error('No v1.x release found on cimon-releases');
 }

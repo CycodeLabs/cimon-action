@@ -127600,7 +127600,7 @@ const CIMON_EXECUTABLE_PATH = path__WEBPACK_IMPORTED_MODULE_5__.join(CIMON_EXECU
 // GitHub release and verify it before running it (see
 // src/common/install.js).
 const CIMON_RELEASES_API =
-    'https://api.github.com/repos/cycodelabs/cimon-releases/releases/latest';
+    'https://api.github.com/repos/cycodelabs/cimon-releases/releases';
 
 const httpClient = new _actions_http_client__WEBPACK_IMPORTED_MODULE_4__.HttpClient('cimon-action');
 
@@ -127627,7 +127627,8 @@ function apiTokenFor(githubToken) {
     return host === 'github.com' ? githubToken : '';
 }
 
-// latestTag looks up the latest cimon release on api.github.com.
+// latestTag looks up the newest stable v1 cimon release on api.github.com
+// (see pickLatestV1 for why GitHub's own "latest" is not used).
 //
 // Without a token the lookup uses the unauthenticated REST limit (60
 // req/IP/hour), which busy self-hosted fleets behind a shared egress IP can
@@ -127647,14 +127648,21 @@ async function latestTag(githubToken) {
         );
     }
 
-    const latest = await httpClient.getJson(CIMON_RELEASES_API, headers);
-    const tag = latest.result && latest.result.tag_name;
-    if (!tag) {
-        throw new Error(
-            'Failed resolving latest cimon-releases tag (no tag_name in API response)'
+    for (let page = 1; page <= 5; page++) {
+        const response = await httpClient.getJson(
+            `${CIMON_RELEASES_API}?per_page=100&page=${page}`,
+            headers
         );
+        const releases = response.result;
+        if (!Array.isArray(releases) || releases.length === 0) {
+            break;
+        }
+        const tag = (0,_src_common_release_js__WEBPACK_IMPORTED_MODULE_9__/* .pickLatestV1 */ .mZ)(releases);
+        if (tag) {
+            return tag;
+        }
     }
-    return tag;
+    throw new Error('No v1.x release found on cimon-releases');
 }
 
 // installVerified installs cimon release `version` (or the latest release
@@ -128243,6 +128251,7 @@ async function installRelease({
 
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
 /* harmony export */   CM: () => (/* binding */ resolveRelease),
+/* harmony export */   mZ: () => (/* binding */ pickLatestV1),
 /* harmony export */   o0: () => (/* binding */ CIMON_RELEASES_URL)
 /* harmony export */ });
 /* unused harmony export parseVersion */
@@ -128279,17 +128288,40 @@ function parseVersion(input) {
 // resolveRelease reads the release-path and version inputs together and
 // returns { releasePath, version }, where version is a normalized tag or ''
 // for the latest release. The two inputs select the binary in different ways,
-// so setting both is an error rather than a silent precedence rule.
+// so setting both is an error rather than a silent precedence rule. That
+// includes `version: latest`, which asks for a download as much as a tag does.
 function resolveRelease(releasePathInput, versionInput) {
     const releasePath = (releasePathInput || '').trim();
     const version = parseVersion(versionInput);
-    if (releasePath !== '' && version !== '') {
+    const versionSet = (versionInput || '').trim() !== '';
+    if (releasePath !== '' && versionSet) {
         throw new Error(
             'Set either release-path or version, not both. release-path runs ' +
                 'a binary already on the runner; version downloads that release.'
         );
     }
     return { releasePath, version };
+}
+
+// A stable v1 tag: v1.x.y with no pre-release suffix.
+const STABLE_V1_TAG = /^v1\.\d+\.\d+$/;
+
+// pickLatestV1 returns the first stable v1 tag in a page of the GitHub
+// releases API (newest first), or ''. "Latest" is not taken from GitHub's
+// /releases/latest, because v0 releases are still published from the v0
+// line and GitHub marks the newest one as latest.
+function pickLatestV1(releases) {
+    for (const release of releases || []) {
+        if (
+            release &&
+            !release.draft &&
+            typeof release.tag_name === 'string' &&
+            STABLE_V1_TAG.test(release.tag_name)
+        ) {
+            return release.tag_name;
+        }
+    }
+    return '';
 }
 
 

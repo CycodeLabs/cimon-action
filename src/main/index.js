@@ -9,7 +9,11 @@ import {
     COSIGN_VERSION,
     sha256File,
 } from '../common/install.js';
-import { CIMON_RELEASES_URL, resolveRelease } from '../common/release.js';
+import {
+    CIMON_RELEASES_URL,
+    pickLatestV1,
+    resolveRelease,
+} from '../common/release.js';
 
 const CIMON_SCRIPT_DOWNLOAD_URL =
     'https://cimon-releases.s3.amazonaws.com/install.sh';
@@ -18,27 +22,19 @@ const CIMON_EXECUTABLE_DIR = '/tmp/cimon';
 const CIMON_EXECUTABLE_PATH = '/tmp/cimon/cimon';
 
 async function getLatestV1Version() {
-    // Paginate through releases to find the latest v1.x tag.
-    // GitHub returns 30 per page by default; use 100 and check up to 5 pages.
+    // Page through releases (newest first) for the newest stable v1.x tag.
+    // GitHub's own "latest" is not used: v0 releases are still published
+    // from the v0 line, and release candidates (vX.Y.Z-rc...) are skipped.
     const baseUrl = 'https://api.github.com/repos/CycodeLabs/cimon-releases/releases';
     for (let page = 1; page <= 5; page++) {
         const response = await httpClient.getJson(
             `${baseUrl}?per_page=100&page=${page}`
         );
         const releases = response.result;
-        if (!releases || releases.length === 0) break;
+        if (!Array.isArray(releases) || releases.length === 0) break;
 
-        for (const release of releases) {
-            // Match v1.x.y but skip v1.x.y-rc1, v1.x.y-alpha, etc.
-            // Pre-releases on GitHub are fine (our release workflow marks
-            // all v1.x as pre-release to not override v0 latest).
-            if (release.tag_name &&
-                release.tag_name.startsWith('v1.') &&
-                !release.draft &&
-                !release.tag_name.includes('-')) {
-                return release.tag_name;
-            }
-        }
+        const tag = pickLatestV1(releases);
+        if (tag) return tag;
     }
     throw new Error('No v1.x release found on cimon-releases');
 }
