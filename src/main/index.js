@@ -11,6 +11,8 @@ import {
 } from '../common/install.js';
 import {
     CIMON_RELEASES_URL,
+    ConfigError,
+    isConfigError,
     pickLatestV1,
     resolveRelease,
 } from '../common/release.js';
@@ -63,7 +65,10 @@ async function installCosign() {
     return cosignPath;
 }
 
-async function downloadV1Binary(version) {
+// downloadV1Binary downloads and verifies cimon `version`. With pinned set
+// (the version input chose it), a release that does not exist is a
+// ConfigError.
+async function downloadV1Binary(version, { pinned = false } = {}) {
     const arch = process.arch === 'arm64' ? 'arm64' : 'x86_64';
     const baseUrl = `${CIMON_RELEASES_URL}/download/${version}`;
     const tarName = `cimon_linux_${arch}.tar.gz`;
@@ -78,7 +83,8 @@ async function downloadV1Binary(version) {
         // A missing tarball is almost always a mistyped or unpublished
         // version; say so before the signature check reports it as an
         // unsigned release.
-        throw new Error(
+        const Kind = pinned && error.httpStatusCode === 404 ? ConfigError : Error;
+        throw new Kind(
             `Could not download cimon ${version} (${error.message}). Check ` +
                 `that ${version} is a published release at ${CIMON_RELEASES_URL}.`
         );
@@ -180,7 +186,9 @@ async function downloadBinaryToFile(url, filePath) {
     const message = response.message;
     if (message.statusCode !== 200) {
         message.resume();
-        throw new Error(`HTTP ${message.statusCode} from ${url}`);
+        const error = new Error(`HTTP ${message.statusCode} from ${url}`);
+        error.httpStatusCode = message.statusCode;
+        throw error;
     }
     const chunks = [];
     await new Promise((resolve, reject) => {
@@ -272,13 +280,13 @@ async function run(config) {
         // without hardening. It also skips install.sh, so nothing fetched at
         // run time decides which binary runs.
         if (!release.version.startsWith('v1.')) {
-            throw new Error(
+            throw new ConfigError(
                 `version ${release.version} is not supported: this action ` +
                     `runs cimon v1.x releases.`
             );
         }
         core.info(`Running Cimon ${release.version} (pinned by the version input)`);
-        releasePath = await downloadV1Binary(release.version);
+        releasePath = await downloadV1Binary(release.version, { pinned: true });
     } else if (config.cimon.hardening) {
         // Hardening requires v1.x binary. Auto-download latest v1.x release.
         const version = await getLatestV1Version();
@@ -411,7 +419,9 @@ try {
     const failOnError = core.getBooleanInput('fail-on-error');
     const log = error.message;
     core.error(`Cimon action error: ${log}`);
-    if (failOnError) {
+    // A mistake in the version input fails the step whatever fail-on-error
+    // says (see ConfigError).
+    if (failOnError || isConfigError(error)) {
         core.setFailed(log);
     }
 }

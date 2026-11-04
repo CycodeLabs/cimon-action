@@ -81,9 +81,10 @@ inputs:
       https://github.com/CycodeLabs/cimon-releases/releases (for example
       v1.0.28; the leading "v" is optional). Empty or "latest" runs the latest
       release, resolved each time the action runs. Set it to upgrade on your
-      own schedule. The download is checked against the release's signed
-      checksums. Requires a v1.x release. Cannot be combined with
-      release-path.
+      own schedule. A pinned release is checked against its signed checksums
+      before it runs. Requires a v1.x release. Cannot be combined with
+      release-path. An invalid or unknown version fails the step even with
+      fail-on-error set to false.
     required: false
     default: ''
   release-path:

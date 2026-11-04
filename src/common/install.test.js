@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { isConfigError } from './release.js';
 import {
     checksumFor,
     cosignAsset,
@@ -158,7 +159,19 @@ describe('installRelease', () => {
 
     it('explains a missing asset', async () => {
         delete files[ASSET];
-        await assert.rejects(installRelease(options()), /cimon v1.0.28 has no cimon_darwin_arm64.tar.gz/);
+        await assert.rejects(installRelease(options()), (error) => {
+            assert.match(error.message, /cimon v1.0.28 has no cimon_darwin_arm64.tar.gz/);
+            assert.equal(isConfigError(error), false);
+            return true;
+        });
+    });
+
+    it('treats a missing asset for a pinned version as an input mistake', async () => {
+        delete files[ASSET];
+        await assert.rejects(installRelease(options({ pinned: true })), (error) => {
+            assert.ok(isConfigError(error));
+            return true;
+        });
     });
 
     it('installs cimon.exe on Windows', async () => {

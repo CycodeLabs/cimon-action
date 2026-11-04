@@ -10,6 +10,22 @@ const TAG_PATTERN = /^v?\d+\.\d+\.\d+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$/;
 export const CIMON_RELEASES_URL =
     'https://github.com/CycodeLabs/cimon-releases/releases';
 
+// ConfigError marks a mistake in the release selection: a version that is
+// not a release tag, does not exist, or is set together with release-path.
+// Both actions fail the step on it even with fail-on-error: false, which
+// only covers errors at run time (network, the agent itself), so a typo can
+// never leave the step green with Cimon not running.
+export class ConfigError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'ConfigError';
+    }
+}
+
+export function isConfigError(error) {
+    return Boolean(error) && error.name === 'ConfigError';
+}
+
 // parseVersion turns the `version` input into a cimon-releases tag. An empty
 // input or "latest" returns '' (install the latest release). Anything that is
 // not a release tag throws, so a typo fails the step instead of silently
@@ -20,7 +36,7 @@ export function parseVersion(input) {
         return '';
     }
     if (!TAG_PATTERN.test(value)) {
-        throw new Error(
+        throw new ConfigError(
             `Invalid version "${value}". Use a tag from ${CIMON_RELEASES_URL} ` +
                 `(for example v1.0.28), or "latest".`
         );
@@ -38,7 +54,7 @@ export function resolveRelease(releasePathInput, versionInput) {
     const version = parseVersion(versionInput);
     const versionSet = (versionInput || '').trim() !== '';
     if (releasePath !== '' && versionSet) {
-        throw new Error(
+        throw new ConfigError(
             'Set either release-path or version, not both. release-path runs ' +
                 'a binary already on the runner; version downloads that release.'
         );

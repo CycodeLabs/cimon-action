@@ -8,7 +8,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { CIMON_RELEASES_URL } from './release.js';
+import { CIMON_RELEASES_URL, ConfigError } from './release.js';
 
 // Cycode's release signing key (the same key as cosign.pub at the root of
 // this repository). It ships inside the action, never with the release, so a
@@ -137,8 +137,12 @@ async function installCosign({ platform, arch, workDir, download, cosignSha256, 
 //     an error carrying httpStatusCode on an HTTP error.
 //   run(command, args): resolves to the exit code.
 //   extract(archivePath, destDir, kind): kind is 'zip' or 'tar' (gzip).
+//
+// With pinned set (the tag came from the version input), a release without
+// the asset is a ConfigError.
 export async function installRelease({
     tag,
+    pinned = false,
     workDir,
     download,
     run,
@@ -160,7 +164,8 @@ export async function installRelease({
         await download(`${base}/${asset.name}`, assetPath);
     } catch (error) {
         if (notFound(error)) {
-            throw new Error(
+            const Kind = pinned ? ConfigError : Error;
+            throw new Kind(
                 `cimon ${tag} has no ${asset.name}. Check that ${tag} is a ` +
                     `published release with that asset at ${CIMON_RELEASES_URL}.`
             );

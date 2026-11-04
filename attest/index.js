@@ -6,8 +6,14 @@ import * as http from '@actions/http-client';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { installRelease } from '../src/common/install.js';
-import { pickLatestV1, resolveRelease } from '../src/common/release.js';
+import {
+    CIMON_RELEASES_URL,
+    ConfigError,
+    isConfigError,
+    pickLatestV1,
+    resolveRelease,
+} from '../src/common/release.js';
+import { installRelease, releaseAsset } from '../src/common/install.js';
 
 const IS_WINDOWS = process.platform === 'win32';
 
@@ -103,6 +109,23 @@ async function latestTag(githubToken) {
     throw new Error('No v1.x release found on cimon-releases');
 }
 
+// assertPinnedRelease fails with a ConfigError when the pinned release has
+// no asset for this runner. install.sh reports a missing tag the same way as
+// a network failure, so the Linux path checks first; it reaches the same
+// github.com URL install.sh downloads from.
+async function assertPinnedRelease(tag) {
+    const asset = releaseAsset(process.platform, process.arch).name;
+    const url = `${CIMON_RELEASES_URL}/download/${tag}/${asset}`;
+    const response = await httpClient.head(url);
+    response.message.resume();
+    if (response.message.statusCode === 404) {
+        throw new ConfigError(
+            `cimon ${tag} has no ${asset}. Check that ${tag} is a published ` +
+                `release with that asset at ${CIMON_RELEASES_URL}.`
+        );
+    }
+}
+
 // installVerified installs cimon release `version` (or the latest release
 // when it is '') and returns the path to the binary. The hardening agent does
 // not exist on Windows or macOS; those builds only expose `attest` and the
@@ -118,6 +141,7 @@ async function installVerified(githubToken, version) {
     const tag = version || (await latestTag(githubToken));
     return installRelease({
         tag,
+        pinned: version !== '',
         workDir: CIMON_TMP_DIR,
         log: (message) => core.info(message),
         download: async (url, dest) => {
@@ -292,6 +316,7 @@ async function run(config) {
             // install.sh takes the release tag as its last argument and
             // installs the latest release without one.
             if (release.version !== '') {
+                await assertPinnedRelease(release.version);
                 params.push(release.version);
             }
             let retval = await exec.exec('sh', params);
@@ -419,7 +444,9 @@ try {
 } catch (error) {
     const failOnError = core.getBooleanInput('fail-on-error');
     const log = error.message;
-    if (failOnError) {
+    // A mistake in the version input fails the step whatever fail-on-error
+    // says (see ConfigError).
+    if (failOnError || isConfigError(error)) {
         core.setFailed(log);
     } else {
         core.warning(log);

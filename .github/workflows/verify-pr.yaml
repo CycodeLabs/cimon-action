@@ -324,6 +324,27 @@ jobs:
           echo "::error::release-path together with version should fail the step"
           exit 1
 
+      # A version that does not exist is an input mistake: it fails the
+      # step even with fail-on-error: false.
+      - name: Run Cimon Attest with a version that does not exist
+        id: unknown
+        continue-on-error: true
+        uses: ./attest
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
+          subjects: artifact.txt
+          sign-key: private-key.pem
+          version: v1.0.999
+          report-artifact: false
+          fail-on-error: false
+
+      - name: Check the unknown version failed the step
+        if: steps.unknown.outcome != 'failure'
+        run: |
+          echo "::error::an unknown version should fail the step even with fail-on-error: false"
+          exit 1
+
   verify-attest-pinned-windows:
     runs-on: windows-latest
     env:

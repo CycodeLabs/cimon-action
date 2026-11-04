@@ -22,6 +22,8 @@ inputs:
       release, resolved each time the action runs. Set it to upgrade on your
       own schedule. On Windows and macOS the release must include a build for
       that platform (v1.0.16 or later). Cannot be combined with release-path.
+      An invalid or unknown version fails the step even with fail-on-error
+      set to false.
     required: false
     default: ''
   release-path:

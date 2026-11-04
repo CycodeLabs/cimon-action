@@ -127558,8 +127558,8 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony import */ var path__WEBPACK_IMPORTED_MODULE_5__ = __nccwpck_require__(16928);
 /* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_6__ = __nccwpck_require__(79896);
 /* harmony import */ var os__WEBPACK_IMPORTED_MODULE_7__ = __nccwpck_require__(70857);
-/* harmony import */ var _src_common_install_js__WEBPACK_IMPORTED_MODULE_8__ = __nccwpck_require__(7845);
-/* harmony import */ var _src_common_release_js__WEBPACK_IMPORTED_MODULE_9__ = __nccwpck_require__(4799);
+/* harmony import */ var _src_common_release_js__WEBPACK_IMPORTED_MODULE_8__ = __nccwpck_require__(4799);
+/* harmony import */ var _src_common_install_js__WEBPACK_IMPORTED_MODULE_9__ = __nccwpck_require__(7845);
 
 
 
@@ -127657,12 +127657,29 @@ async function latestTag(githubToken) {
         if (!Array.isArray(releases) || releases.length === 0) {
             break;
         }
-        const tag = (0,_src_common_release_js__WEBPACK_IMPORTED_MODULE_9__/* .pickLatestV1 */ .mZ)(releases);
+        const tag = (0,_src_common_release_js__WEBPACK_IMPORTED_MODULE_8__/* .pickLatestV1 */ .mZ)(releases);
         if (tag) {
             return tag;
         }
     }
     throw new Error('No v1.x release found on cimon-releases');
+}
+
+// assertPinnedRelease fails with a ConfigError when the pinned release has
+// no asset for this runner. install.sh reports a missing tag the same way as
+// a network failure, so the Linux path checks first; it reaches the same
+// github.com URL install.sh downloads from.
+async function assertPinnedRelease(tag) {
+    const asset = (0,_src_common_install_js__WEBPACK_IMPORTED_MODULE_9__/* .releaseAsset */ .oy)(process.platform, process.arch).name;
+    const url = `${_src_common_release_js__WEBPACK_IMPORTED_MODULE_8__/* .CIMON_RELEASES_URL */ .o0}/download/${tag}/${asset}`;
+    const response = await httpClient.head(url);
+    response.message.resume();
+    if (response.message.statusCode === 404) {
+        throw new _src_common_release_js__WEBPACK_IMPORTED_MODULE_8__/* .ConfigError */ .xL(
+            `cimon ${tag} has no ${asset}. Check that ${tag} is a published ` +
+                `release with that asset at ${_src_common_release_js__WEBPACK_IMPORTED_MODULE_8__/* .CIMON_RELEASES_URL */ .o0}.`
+        );
+    }
 }
 
 // installVerified installs cimon release `version` (or the latest release
@@ -127678,8 +127695,9 @@ async function installVerified(githubToken, version) {
     }
 
     const tag = version || (await latestTag(githubToken));
-    return (0,_src_common_install_js__WEBPACK_IMPORTED_MODULE_8__/* .installRelease */ .Rs)({
+    return (0,_src_common_install_js__WEBPACK_IMPORTED_MODULE_9__/* .installRelease */ .Rs)({
         tag,
+        pinned: version !== '',
         workDir: CIMON_TMP_DIR,
         log: (message) => _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(message),
         download: async (url, dest) => {
@@ -127802,7 +127820,7 @@ function signingArgs(config) {
 }
 
 async function run(config) {
-    const release = (0,_src_common_release_js__WEBPACK_IMPORTED_MODULE_9__/* .resolveRelease */ .CM)(
+    const release = (0,_src_common_release_js__WEBPACK_IMPORTED_MODULE_8__/* .resolveRelease */ .CM)(
         config.cimon.releasePath,
         config.cimon.version
     );
@@ -127854,6 +127872,7 @@ async function run(config) {
             // install.sh takes the release tag as its last argument and
             // installs the latest release without one.
             if (release.version !== '') {
+                await assertPinnedRelease(release.version);
                 params.push(release.version);
             }
             let retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sh', params);
@@ -127981,7 +128000,9 @@ try {
 } catch (error) {
     const failOnError = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('fail-on-error');
     const log = error.message;
-    if (failOnError) {
+    // A mistake in the version input fails the step whatever fail-on-error
+    // says (see ConfigError).
+    if (failOnError || (0,_src_common_release_js__WEBPACK_IMPORTED_MODULE_8__/* .isConfigError */ .De)(error)) {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.setFailed(log);
     } else {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(log);
@@ -127997,9 +128018,10 @@ __webpack_async_result__();
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
 
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
-/* harmony export */   Rs: () => (/* binding */ installRelease)
+/* harmony export */   Rs: () => (/* binding */ installRelease),
+/* harmony export */   oy: () => (/* binding */ releaseAsset)
 /* harmony export */ });
-/* unused harmony exports CIMON_COSIGN_PUBLIC_KEY, COSIGN_VERSION, COSIGN_SHA256, releaseAsset, cosignAsset, sha256File, checksumFor */
+/* unused harmony exports CIMON_COSIGN_PUBLIC_KEY, COSIGN_VERSION, COSIGN_SHA256, cosignAsset, sha256File, checksumFor */
 /* harmony import */ var crypto__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(76982);
 /* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(79896);
 /* harmony import */ var path__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(16928);
@@ -128143,8 +128165,12 @@ async function installCosign({ platform, arch, workDir, download, cosignSha256, 
 //     an error carrying httpStatusCode on an HTTP error.
 //   run(command, args): resolves to the exit code.
 //   extract(archivePath, destDir, kind): kind is 'zip' or 'tar' (gzip).
+//
+// With pinned set (the tag came from the version input), a release without
+// the asset is a ConfigError.
 async function installRelease({
     tag,
+    pinned = false,
     workDir,
     download,
     run,
@@ -128166,7 +128192,8 @@ async function installRelease({
         await download(`${base}/${asset.name}`, assetPath);
     } catch (error) {
         if (notFound(error)) {
-            throw new Error(
+            const Kind = pinned ? _release_js__WEBPACK_IMPORTED_MODULE_3__/* .ConfigError */ .xL : Error;
+            throw new Kind(
                 `cimon ${tag} has no ${asset.name}. Check that ${tag} is a ` +
                     `published release with that asset at ${_release_js__WEBPACK_IMPORTED_MODULE_3__/* .CIMON_RELEASES_URL */ .o0}.`
             );
@@ -128251,8 +128278,10 @@ async function installRelease({
 
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
 /* harmony export */   CM: () => (/* binding */ resolveRelease),
+/* harmony export */   De: () => (/* binding */ isConfigError),
 /* harmony export */   mZ: () => (/* binding */ pickLatestV1),
-/* harmony export */   o0: () => (/* binding */ CIMON_RELEASES_URL)
+/* harmony export */   o0: () => (/* binding */ CIMON_RELEASES_URL),
+/* harmony export */   xL: () => (/* binding */ ConfigError)
 /* harmony export */ });
 /* unused harmony export parseVersion */
 // Release selection shared by the agent action (src/main) and the attest
@@ -128267,6 +128296,22 @@ const TAG_PATTERN = /^v?\d+\.\d+\.\d+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$/;
 const CIMON_RELEASES_URL =
     'https://github.com/CycodeLabs/cimon-releases/releases';
 
+// ConfigError marks a mistake in the release selection: a version that is
+// not a release tag, does not exist, or is set together with release-path.
+// Both actions fail the step on it even with fail-on-error: false, which
+// only covers errors at run time (network, the agent itself), so a typo can
+// never leave the step green with Cimon not running.
+class ConfigError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'ConfigError';
+    }
+}
+
+function isConfigError(error) {
+    return Boolean(error) && error.name === 'ConfigError';
+}
+
 // parseVersion turns the `version` input into a cimon-releases tag. An empty
 // input or "latest" returns '' (install the latest release). Anything that is
 // not a release tag throws, so a typo fails the step instead of silently
@@ -128277,7 +128322,7 @@ function parseVersion(input) {
         return '';
     }
     if (!TAG_PATTERN.test(value)) {
-        throw new Error(
+        throw new ConfigError(
             `Invalid version "${value}". Use a tag from ${CIMON_RELEASES_URL} ` +
                 `(for example v1.0.28), or "latest".`
         );
@@ -128295,7 +128340,7 @@ function resolveRelease(releasePathInput, versionInput) {
     const version = parseVersion(versionInput);
     const versionSet = (versionInput || '').trim() !== '';
     if (releasePath !== '' && versionSet) {
-        throw new Error(
+        throw new ConfigError(
             'Set either release-path or version, not both. release-path runs ' +
                 'a binary already on the runner; version downloads that release.'
         );

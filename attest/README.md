@@ -69,7 +69,8 @@ then runs that binary and downloads nothing:
     release-path: C:\Tools\cimon\v1.0.28\cimon.exe
 ```
 
-`version` and `release-path` cannot be combined. Pinning the action itself
+An invalid or unknown version fails the step even with
+`fail-on-error: false`. `version` and `release-path` cannot be combined. Pinning the action itself
 (`@v1`, a release tag, or a commit SHA) does not pin the Cimon binary:
 without one of these inputs, every run uses the latest release.
 

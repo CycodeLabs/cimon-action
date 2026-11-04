@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseVersion, pickLatestV1, resolveRelease } from './release.js';
+import { isConfigError, parseVersion, pickLatestV1, resolveRelease } from './release.js';
 
 describe('parseVersion', () => {
     it('treats empty and latest as the latest release', () => {
@@ -95,5 +95,21 @@ describe('pickLatestV1', () => {
         assert.equal(pickLatestV1([{ tag_name: 'v0.12.4' }, { tag_name: 'v1.0.30-rc1' }]), '');
         assert.equal(pickLatestV1([]), '');
         assert.equal(pickLatestV1(null), '');
+    });
+});
+
+describe('ConfigError', () => {
+    it('marks input mistakes so they fail the step', () => {
+        for (const bad of [() => parseVersion('v1.0'), () => resolveRelease('/opt/cimon/cimon', 'latest')]) {
+            let caught;
+            try {
+                bad();
+            } catch (error) {
+                caught = error;
+            }
+            assert.ok(isConfigError(caught), String(caught));
+        }
+        assert.equal(isConfigError(new Error('network')), false);
+        assert.equal(isConfigError(undefined), false);
     });
 });
