@@ -17,17 +17,21 @@ import { installRelease, releaseAsset } from '../src/common/install.js';
 
 const IS_WINDOWS = process.platform === 'win32';
 
-// SECURITY: scope every install under a unique per-job subdirectory so a
+// SECURITY: scope every install under a unique per-step subdirectory so a
 // malicious previous step / job on a self-hosted runner cannot plant a
 // pre-existing cimon binary or install script that we'd silently reuse.
 // GHES self-hosted runners commonly persist $RUNNER_TEMP between jobs;
 // public hosted runners give us a fresh VM, but we apply the same
-// hardening unconditionally.
+// hardening unconditionally. GITHUB_ACTION identifies the step (GitHub
+// adds a numeric suffix when a job uses the action more than once), so a
+// second attest step in the job does not replace the binary the first one
+// installed and reported as cimon-path.
 const CIMON_TMP_BASE = process.env.RUNNER_TEMP || os.tmpdir();
 const CIMON_RUN_KEY = [
     process.env.GITHUB_RUN_ID || 'local',
     process.env.GITHUB_RUN_ATTEMPT || '0',
     process.env.GITHUB_JOB || 'job',
+    process.env.GITHUB_ACTION || 'step',
 ]
     .map((s) => String(s).replace(/[^A-Za-z0-9._-]/g, '_'))
     .join('-');

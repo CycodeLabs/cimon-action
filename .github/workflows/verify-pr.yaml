@@ -372,11 +372,26 @@ jobs:
           report-artifact: false
           fail-on-error:   true
 
+      # A second attest step in the same job installs its own binary and
+      # leaves the first step's install, and cimon-path, alone.
+      - name: Cimon Attest (Windows, latest, second step)
+        id: attest_latest
+        uses: ./attest
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret:    ${{ secrets.CIMON_SECRET }}
+          subjects:  dist\sample.exe
+          sign-key:  private-key.pem
+          report-artifact: false
+          fail-on-error:   true
+
       - name: Check the pinned binary ran
         shell: pwsh
         env:
           CIMON_RAN: ${{ steps.attest.outputs.cimon-path }}
+          CIMON_LATEST: ${{ steps.attest_latest.outputs.cimon-path }}
         run: |
+          if ($env:CIMON_RAN -eq $env:CIMON_LATEST) { throw "both attest steps reported the same cimon-path: $env:CIMON_RAN" }
           $url = "https://github.com/CycodeLabs/cimon-releases/releases/download/$env:PINNED_VERSION/cimon_windows_x86_64.zip"
           Invoke-WebRequest $url -OutFile expected.zip
           Expand-Archive expected.zip -DestinationPath expected
