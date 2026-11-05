@@ -31,9 +31,48 @@ top-level `cycodelabs/cimon-action@v1` action instead.
 ```
 
 The action automatically detects the runner platform and downloads the
-matching `cimon` binary (`cimon.exe` on Windows). It uses
+matching `cimon` binary (`cimon.exe` on Windows). On Windows and macOS it
+verifies the download before running it: the cosign signature on the
+release's `checksums.txt` against Cycode's release key, then the archive's
+SHA256. On Linux it installs through `install.sh`, which checks the
+archive's SHA256 against `checksums.txt`. The action uses
 `$RUNNER_TEMP` so it cooperates with on-prem GHES self-hosted runners
 that may not have `/tmp` writable.
+
+## Pinning the Cimon version
+
+By default the action runs the latest Cimon release, which it looks up each
+time the job runs. Set `version` to a tag from
+[cimon-releases](https://github.com/CycodeLabs/cimon-releases/releases) to
+keep running that release until you change it:
+
+```yaml
+- uses: cycodelabs/cimon-action/attest@v1
+  with:
+    subjects: dist\my-app.msi
+    sign-key: private-key.pem
+    version: v1.0.28
+```
+
+On Windows and macOS the release must include a build for that platform
+(v1.0.16 or later).
+
+To run a binary you have scanned and staged yourself, or on a runner with no
+route to github.com, set `release-path` to its location instead. The action
+then runs that binary and downloads nothing:
+
+```yaml
+- uses: cycodelabs/cimon-action/attest@v1
+  with:
+    subjects: dist\my-app.msi
+    sign-key: private-key.pem
+    release-path: C:\Tools\cimon\v1.0.28\cimon.exe
+```
+
+An invalid or unknown version fails the step even with
+`fail-on-error: false`. `version` and `release-path` cannot be combined. Pinning the action itself
+(`@v1`, a release tag, or a commit SHA) does not pin the Cimon binary:
+without one of these inputs, every run uses the latest release.
 
 ## SBOM attestation (Windows, macOS, or any tool-generated SBOM)
 
@@ -154,6 +193,8 @@ releases accept these inputs and produce no timestamp.
 | Name | Description | Default |
 |---|---|---|
 | `subjects` | Whitespace-separated list of artifact paths or base64 subjects | — |
+| `version` | Cimon release to run, as a tag from [cimon-releases](https://github.com/CycodeLabs/cimon-releases/releases) (for example `v1.0.28`). Empty or `latest` runs the latest release. See [Pinning the Cimon version](#pinning-the-cimon-version) | latest |
+| `release-path` | Path to a `cimon` / `cimon.exe` binary already on the runner. The action runs it and downloads nothing. Cannot be combined with `version` | |
 | `source-path` | Path to the source checkout recorded in the attestation. Unset means automatic discovery (subject paths, run-id directory, workspace). Requires cimon v1.0.24 or later | — |
 | `skip-source-tree-check` | Skip verifying the source tree matches the recorded commit | `false` |
 | `sign-key` | Path to a private ECDSA/RSA/ED25519 PEM key | — |

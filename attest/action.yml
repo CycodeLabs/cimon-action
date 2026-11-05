@@ -14,8 +14,24 @@ inputs:
   url:
     description: Cimon endpoint for authentication
     required: false
+  version:
+    description: |
+      Cimon release to run, as a tag from
+      https://github.com/CycodeLabs/cimon-releases/releases (for example
+      v1.0.28; the leading "v" is optional). Empty or "latest" runs the latest
+      release, resolved each time the action runs. Set it to upgrade on your
+      own schedule. On Windows and macOS the release must include a build for
+      that platform (v1.0.16 or later). Cannot be combined with release-path.
+      An invalid or unknown version fails the step even with fail-on-error
+      set to false.
+    required: false
+    default: ''
   release-path:
-    description: Path to Cimon release file (Used for debugging)
+    description: |
+      Path to a Cimon binary (cimon or cimon.exe) already on the runner. When
+      set, the action runs that binary and downloads nothing. Use it on
+      air-gapped runners, or to run a binary you have scanned and staged
+      yourself. Cannot be combined with version.
     required: false
     default: ''
   subjects:
