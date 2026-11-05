@@ -131,10 +131,11 @@ If your environment cannot submit to the public Sigstore transparency
 log (e.g. customers in the USA / EU with data-residency requirements),
 use one of:
 
-- **KMS signing**: `kms: vault://<key-name>` (HashiCorp Vault transit).
-  The private key never leaves Vault; cimon sends the digest and receives
-  the signature. Vault transit is the only KMS backend implemented today,
-  and it requires cimon v1.0.28 or later.
+- **KMS signing**: `kms: vault://<key-name>` (HashiCorp Vault transit,
+  cimon v1.0.28 or later), or `kms: pkcs11:token=<token-label>;object=<key-label>`
+  (a key on a PKCS#11 token such as an HSM, on Windows runners, cimon
+  v1.0.29 or later). The private key never leaves Vault or the token; cimon
+  sends the digest and receives the signature.
 - **Keyed signing with checked-in private key**: `sign-key: private-key.pem`.
 - **Private Sigstore**: deploy your own Fulcio + Rekor and pass
   `fulcio-server-url` + `rekor-server-url`.
@@ -162,6 +163,50 @@ the key must support signing (for example `ecdsa-p256` or `rsa-3072`):
 Verifiers need the key's public half, which Vault returns from
 `transit/keys/<key-name>`:
 `cimon attest verify --key public-key.pem --signed-prov provenance.intoto.jsonl.sig`.
+
+### KMS signing with a PKCS#11 token (HSM)
+
+On Windows runners, cimon can sign with a key that stays on a PKCS#11
+token, such as a Thales Luna HSM partition. It loads the token vendor's
+PKCS#11 library and the token signs, so the key never reaches the runner.
+The runner needs the vendor client installed and connected to the token
+(for a Luna Network HSM, the Luna Client registered with the partition).
+Requires cimon v1.0.29 or later.
+
+Fetch the token PIN from your secrets manager in an earlier step, mask it,
+and pass it as `CIMON_PKCS11_PIN`. cimon reads the PIN only from that
+variable, never from the key URI:
+
+```yaml
+- name: Fetch the token PIN
+  shell: pwsh
+  run: |
+    $pin = <your secrets-manager lookup of the PIN>
+    Write-Output "::add-mask::$pin"
+    "CIMON_PKCS11_PIN=$pin" |
+      Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+- uses: cycodelabs/cimon-action/attest@v1
+  env:
+    CIMON_PKCS11_MODULE: C:\Program Files\SafeNet\LunaClient\cryptoki.dll
+  with:
+    subjects: dist/my-app.msi
+    kms: "pkcs11:token=<partition-label>;object=<key-label>"
+    fail-on-error: true
+```
+
+- The URI follows RFC 7512: `token=`, `serial=` or `slot-id=` choose the
+  token, and `object=` (the key label) or `id=` choose the key.
+- `CIMON_PKCS11_USER_TYPE: crypto-user` logs in as the Luna Crypto User
+  instead of the Crypto Officer.
+- RSA keys and EC keys (P-256, P-384, P-521) are supported, over a SHA-256
+  digest.
+
+Verifiers need the key's public half. Export it on the runner with
+`cimon attest public-key --kms "<the same URI>" --output public-key.pem`,
+then verify with `cimon attest verify --key public-key.pem`. See
+[KMS or HSM-backed signing](https://docs.cimon.build/provenance/signing-approaches#3-kms-or-hsm-backed-signing)
+for the full setup.
 
 ### Timestamping key-based signatures
 
@@ -198,7 +243,7 @@ releases accept these inputs and produce no timestamp.
 | `source-path` | Path to the source checkout recorded in the attestation. Unset means automatic discovery (subject paths, run-id directory, workspace). Requires cimon v1.0.24 or later | — |
 | `skip-source-tree-check` | Skip verifying the source tree matches the recorded commit | `false` |
 | `sign-key` | Path to a private ECDSA/RSA/ED25519 PEM key | — |
-| `kms` | KMS key URI for signing. HashiCorp Vault transit: `vault://<key-name>`, configured through `VAULT_ADDR` and `VAULT_TOKEN`. Requires cimon v1.0.28 or later | — |
+| `kms` | KMS key URI for signing. HashiCorp Vault transit: `vault://<key-name>`, configured through `VAULT_ADDR` and `VAULT_TOKEN`. Requires cimon v1.0.28 or later. A key on a PKCS#11 token such as an HSM, on Windows runners: `pkcs11:token=<token-label>;object=<key-label>`, with `CIMON_PKCS11_MODULE` and `CIMON_PKCS11_PIN` in the step's `env`. Requires cimon v1.0.29 or later | — |
 | `keyless` | Use keyless (Sigstore) signing | `false` |
 | `tlog-upload` | **Keyless only.** Upload signature to Rekor transparency log | `true` |
 | `include-timestamp` | Request an RFC 3161 timestamp and embed it in the signature. Applies to `keyless`, `sign-key` and `kms` signing | `false` |

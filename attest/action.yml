@@ -60,7 +60,7 @@ inputs:
     required: false
     default: ''
   kms:
-    description: 'KMS key used to sign the provenance statement (and the SBOM attestation when sbom is set), as a provider URI. HashiCorp Vault transit: vault://<key-name>, with the Vault address and token in the VAULT_ADDR and VAULT_TOKEN environment variables. Requires cimon v1.0.28 or later.'
+    description: 'KMS key used to sign the provenance statement (and the SBOM attestation when sbom is set), as a provider URI. HashiCorp Vault transit: vault://<key-name>, with the Vault address and token in the VAULT_ADDR and VAULT_TOKEN environment variables. Requires cimon v1.0.28 or later. A key on a PKCS#11 token such as an HSM, on Windows runners: pkcs11:token=<token-label>;object=<key-label>, with the token''s PKCS#11 library in CIMON_PKCS11_MODULE and its PIN in CIMON_PKCS11_PIN in the step''s env. Requires cimon v1.0.29 or later.'
     required: false
     default: ''
   keyless:
