@@ -27422,6 +27422,368 @@ module.exports = parseParams
 
 /***/ }),
 
+/***/ 2441:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
+
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   "GH": () => (/* binding */ CIMON_COSIGN_PUBLIC_KEY),
+/* harmony export */   "_t": () => (/* binding */ COSIGN_VERSION),
+/* harmony export */   "GS": () => (/* binding */ COSIGN_SHA256),
+/* harmony export */   "ob": () => (/* binding */ sha256File),
+/* harmony export */   "oe": () => (/* binding */ checksumFor),
+/* harmony export */   "Uj": () => (/* binding */ installRelease)
+/* harmony export */ });
+/* unused harmony exports releaseAsset, cosignAsset */
+/* harmony import */ var crypto__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(6113);
+/* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(7147);
+/* harmony import */ var path__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(1017);
+/* harmony import */ var _release_js__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(9630);
+// Verified install of a cimon release. The release asset is checked against
+// the release's checksums.txt, and checksums.txt against Cycode's cosign
+// signature, before anything is extracted or run.
+//
+// This file uses Node built-ins only: attest/ bundles it without the root
+// node_modules, so callers pass in the download, run and extract functions.
+
+
+
+
+
+
+// Cycode's release signing key (the same key as cosign.pub at the root of
+// this repository). It ships inside the action, never with the release, so a
+// replaced release asset cannot bring its own key.
+const CIMON_COSIGN_PUBLIC_KEY = [
+    '-----BEGIN PUBLIC KEY-----',
+    'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEm1mmcCICdlB5j78efKNbPK8Q0UeO',
+    'rDH1UNxhD2ibPuzUDV3OzpL8wVtTnWW1jLGMi7fKiZPfP+pB2BpdUPaMSg==',
+    '-----END PUBLIC KEY-----',
+    '',
+].join('\n');
+
+const COSIGN_VERSION = 'v2.2.1';
+
+// SHA256 of each cosign binary, from cosign_checksums.txt in the cosign
+// v2.2.1 release. The verifier is checked before it runs.
+const COSIGN_SHA256 = {
+    'cosign-linux-amd64':
+        'f6c24066e7f75221c4b7f309b8322d7d42a1d96470e0440e6e357fe43661d81f',
+    'cosign-linux-arm64':
+        '8c04e9877fb6e3a96a3916d4dfa855a493c418ace5d5ec4dba6a249490f888d1',
+    'cosign-darwin-amd64':
+        'f1a948cded75e0858e739d90604e2a7e4d2f3fda15bfef12c0c03726567443bc',
+    'cosign-darwin-arm64':
+        'a9ca33020c41ad245ec595c7097c9280e29e5afdd95ab19359a65d6e1a756777',
+    'cosign-windows-amd64.exe':
+        '88eea88aff14bc42cc00b9212b4cee7a20779836731bf83768cc1d9006cf386d',
+};
+
+const RELEASE_OS = { linux: 'linux', darwin: 'darwin', win32: 'windows' };
+const RELEASE_ARCH = { x64: 'x86_64', arm64: 'arm64' };
+const GO_ARCH = { x64: 'amd64', arm64: 'arm64' };
+
+// releaseAsset names the cimon release asset for a Node platform and arch.
+// Windows releases are x86_64 only, which Windows on Arm runs under
+// emulation.
+function releaseAsset(platform, arch) {
+    const os = RELEASE_OS[platform];
+    if (os === 'windows') {
+        return {
+            name: 'cimon_windows_x86_64.zip',
+            kind: 'zip',
+            binary: 'cimon.exe',
+        };
+    }
+    const releaseArch = RELEASE_ARCH[arch];
+    if (!os || !releaseArch) {
+        throw new Error(`No cimon release is published for ${platform}/${arch}.`);
+    }
+    return {
+        name: `cimon_${os}_${releaseArch}.tar.gz`,
+        kind: 'tar',
+        binary: 'cimon',
+    };
+}
+
+// cosignAsset names the cosign release binary for a Node platform and arch.
+function cosignAsset(platform, arch) {
+    const os = RELEASE_OS[platform];
+    if (os === 'windows') {
+        return 'cosign-windows-amd64.exe';
+    }
+    const goArch = GO_ARCH[arch];
+    if (!os || !goArch) {
+        throw new Error(`No cosign binary is pinned for ${platform}/${arch}.`);
+    }
+    return `cosign-${os}-${goArch}`;
+}
+
+function sha256File(file) {
+    return new Promise((resolve, reject) => {
+        const hash = crypto__WEBPACK_IMPORTED_MODULE_0__.createHash('sha256');
+        fs__WEBPACK_IMPORTED_MODULE_1__.createReadStream(file)
+            .on('error', reject)
+            .on('data', (chunk) => hash.update(chunk))
+            .on('end', () => resolve(hash.digest('hex')));
+    });
+}
+
+// checksumFor returns the SHA256 that a checksums.txt lists for name, or ''
+// when there is no entry. The file name must match exactly.
+function checksumFor(checksumsText, name) {
+    for (const line of checksumsText.split(/\r?\n/)) {
+        const match = line.trim().match(/^([0-9a-fA-F]{64})\s+\*?(\S+)$/);
+        if (match && match[2] === name) {
+            return match[1].toLowerCase();
+        }
+    }
+    return '';
+}
+
+function notFound(error) {
+    return error && error.httpStatusCode === 404;
+}
+
+async function installCosign({ platform, arch, workDir, download, cosignSha256, log }) {
+    const name = cosignAsset(platform, arch);
+    const expected = cosignSha256[name];
+    if (!expected) {
+        throw new Error(`No SHA256 is pinned for ${name}.`);
+    }
+    const file = path__WEBPACK_IMPORTED_MODULE_2__.join(workDir, name);
+    log(`Downloading cosign ${COSIGN_VERSION} (${name})`);
+    await download(
+        `https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/${name}`,
+        file
+    );
+    const actual = await sha256File(file);
+    if (actual !== expected) {
+        throw new Error(
+            `SHA256 mismatch for ${name} ${COSIGN_VERSION}: expected ` +
+                `${expected}, got ${actual}. Refusing to run it.`
+        );
+    }
+    if (platform !== 'win32') {
+        fs__WEBPACK_IMPORTED_MODULE_1__.chmodSync(file, 0o755);
+    }
+    return file;
+}
+
+// installRelease downloads cimon release `tag` into workDir, verifies it, and
+// returns the path of the extracted binary. Any failed check throws before
+// the archive is extracted.
+//
+//   download(url, destPath): resolves once the file is written; rejects with
+//     an error carrying httpStatusCode on an HTTP error.
+//   run(command, args): resolves to the exit code.
+//   extract(archivePath, destDir, kind): kind is 'zip' or 'tar' (gzip).
+//
+// With pinned set (the tag came from the version input), a release without
+// the asset is a ConfigError.
+async function installRelease({
+    tag,
+    pinned = false,
+    workDir,
+    download,
+    run,
+    extract,
+    platform = process.platform,
+    arch = process.arch,
+    log = () => {},
+    cosignSha256 = COSIGN_SHA256,
+}) {
+    const asset = releaseAsset(platform, arch);
+    const base = `${_release_js__WEBPACK_IMPORTED_MODULE_3__/* .CIMON_RELEASES_URL */ .GW}/download/${tag}`;
+    fs__WEBPACK_IMPORTED_MODULE_1__.mkdirSync(workDir, { recursive: true });
+    const assetPath = path__WEBPACK_IMPORTED_MODULE_2__.join(workDir, asset.name);
+    const checksumsPath = path__WEBPACK_IMPORTED_MODULE_2__.join(workDir, 'checksums.txt');
+    const signaturePath = path__WEBPACK_IMPORTED_MODULE_2__.join(workDir, 'checksums.txt.sig');
+
+    log(`Downloading cimon ${tag} (${asset.name})`);
+    try {
+        await download(`${base}/${asset.name}`, assetPath);
+    } catch (error) {
+        if (notFound(error)) {
+            const Kind = pinned ? _release_js__WEBPACK_IMPORTED_MODULE_3__/* .ConfigError */ .x1 : Error;
+            throw new Kind(
+                `cimon ${tag} has no ${asset.name}. Check that ${tag} is a ` +
+                    `published release with that asset at ${_release_js__WEBPACK_IMPORTED_MODULE_3__/* .CIMON_RELEASES_URL */ .GW}.`
+            );
+        }
+        throw error;
+    }
+    await download(`${base}/checksums.txt`, checksumsPath);
+    try {
+        await download(`${base}/checksums.txt.sig`, signaturePath);
+    } catch (error) {
+        if (notFound(error)) {
+            throw new Error(
+                `cimon ${tag} has no checksums.txt.sig, so it cannot be ` +
+                    `verified. Refusing to run it.`
+            );
+        }
+        throw error;
+    }
+
+    const cosign = await installCosign({
+        platform,
+        arch,
+        workDir,
+        download,
+        cosignSha256,
+        log,
+    });
+    const keyPath = path__WEBPACK_IMPORTED_MODULE_2__.join(workDir, 'cimon-cosign.pub');
+    fs__WEBPACK_IMPORTED_MODULE_1__.writeFileSync(keyPath, CIMON_COSIGN_PUBLIC_KEY);
+
+    // Release signatures are not in a transparency log, hence
+    // --insecure-ignore-tlog; the key is what is being checked.
+    log('Verifying the cosign signature on checksums.txt');
+    const code = await run(cosign, [
+        'verify-blob',
+        '--key',
+        keyPath,
+        '--signature',
+        signaturePath,
+        '--insecure-ignore-tlog',
+        checksumsPath,
+    ]);
+    if (code !== 0) {
+        throw new Error(
+            `Signature check failed for cimon ${tag}: checksums.txt is not ` +
+                `signed by Cycode's release key. Refusing to run it.`
+        );
+    }
+
+    const expected = checksumFor(fs__WEBPACK_IMPORTED_MODULE_1__.readFileSync(checksumsPath, 'utf8'), asset.name);
+    if (!expected) {
+        throw new Error(`checksums.txt for cimon ${tag} has no entry for ${asset.name}.`);
+    }
+    const actual = await sha256File(assetPath);
+    if (actual !== expected) {
+        throw new Error(
+            `SHA256 mismatch for ${asset.name} in cimon ${tag}: expected ` +
+                `${expected}, got ${actual}. Refusing to run it.`
+        );
+    }
+    log(`Verified cimon ${tag}: signed checksums, SHA256 ${actual}`);
+
+    const binDir = path__WEBPACK_IMPORTED_MODULE_2__.join(workDir, 'cimon');
+    fs__WEBPACK_IMPORTED_MODULE_1__.rmSync(binDir, { recursive: true, force: true });
+    fs__WEBPACK_IMPORTED_MODULE_1__.mkdirSync(binDir, { recursive: true });
+    await extract(assetPath, binDir, asset.kind);
+    const binary = path__WEBPACK_IMPORTED_MODULE_2__.join(binDir, asset.binary);
+    if (!fs__WEBPACK_IMPORTED_MODULE_1__.existsSync(binary)) {
+        throw new Error(`${asset.binary} not found in ${asset.name} for cimon ${tag}.`);
+    }
+    if (platform !== 'win32') {
+        fs__WEBPACK_IMPORTED_MODULE_1__.chmodSync(binary, 0o755);
+    }
+    return binary;
+}
+
+
+/***/ }),
+
+/***/ 9630:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
+
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   "GW": () => (/* binding */ CIMON_RELEASES_URL),
+/* harmony export */   "x1": () => (/* binding */ ConfigError),
+/* harmony export */   "yb": () => (/* binding */ isConfigError),
+/* harmony export */   "U": () => (/* binding */ resolveRelease),
+/* harmony export */   "UP": () => (/* binding */ pickLatestV1)
+/* harmony export */ });
+/* unused harmony export parseVersion */
+// Release selection shared by the agent action (src/main) and the attest
+// action (attest/). Both bundle this file with ncc.
+
+// A cimon-releases tag: v1.0.28, or a pre-release such as
+// v1.0.30-rc-windows-1. The leading "v" is optional in the input. The
+// pattern also keeps the value safe to place in a download URL and to pass
+// as an install.sh argument.
+const TAG_PATTERN = /^v?\d+\.\d+\.\d+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$/;
+
+const CIMON_RELEASES_URL =
+    'https://github.com/CycodeLabs/cimon-releases/releases';
+
+// ConfigError marks a mistake in the release selection: a version that is
+// not a release tag, does not exist, or is set together with release-path.
+// Both actions fail the step on it even with fail-on-error: false, which
+// only covers errors at run time (network, the agent itself), so a typo can
+// never leave the step green with Cimon not running.
+class ConfigError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'ConfigError';
+    }
+}
+
+function isConfigError(error) {
+    return Boolean(error) && error.name === 'ConfigError';
+}
+
+// parseVersion turns the `version` input into a cimon-releases tag. An empty
+// input or "latest" returns '' (install the latest release). Anything that is
+// not a release tag throws, so a typo fails the step instead of silently
+// installing the latest release.
+function parseVersion(input) {
+    const value = (input || '').trim();
+    if (value === '' || value.toLowerCase() === 'latest') {
+        return '';
+    }
+    if (!TAG_PATTERN.test(value)) {
+        throw new ConfigError(
+            `Invalid version "${value}". Use a tag from ${CIMON_RELEASES_URL} ` +
+                `(for example v1.0.28), or "latest".`
+        );
+    }
+    return value.startsWith('v') ? value : `v${value}`;
+}
+
+// resolveRelease reads the release-path and version inputs together and
+// returns { releasePath, version }, where version is a normalized tag or ''
+// for the latest release. The two inputs select the binary in different ways,
+// so setting both is an error rather than a silent precedence rule. That
+// includes `version: latest`, which asks for a download as much as a tag does.
+function resolveRelease(releasePathInput, versionInput) {
+    const releasePath = (releasePathInput || '').trim();
+    const version = parseVersion(versionInput);
+    const versionSet = (versionInput || '').trim() !== '';
+    if (releasePath !== '' && versionSet) {
+        throw new ConfigError(
+            'Set either release-path or version, not both. release-path runs ' +
+                'a binary already on the runner; version downloads that release.'
+        );
+    }
+    return { releasePath, version };
+}
+
+// A stable v1 tag: v1.x.y with no pre-release suffix.
+const STABLE_V1_TAG = /^v1\.\d+\.\d+$/;
+
+// pickLatestV1 returns the first stable v1 tag in a page of the GitHub
+// releases API (newest first), or ''. "Latest" is not taken from GitHub's
+// /releases/latest, because v0 releases are still published from the v0
+// line and GitHub marks the newest one as latest.
+function pickLatestV1(releases) {
+    for (const release of releases || []) {
+        if (
+            release &&
+            !release.draft &&
+            typeof release.tag_name === 'string' &&
+            STABLE_V1_TAG.test(release.tag_name)
+        ) {
+            return release.tag_name;
+        }
+    }
+    return '';
+}
+
+
+/***/ }),
+
 /***/ 9103:
 /***/ ((__webpack_module__, __unused_webpack___webpack_exports__, __nccwpck_require__) => {
 
@@ -27432,6 +27794,10 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony import */ var os__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(2037);
 /* harmony import */ var path__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(1017);
 /* harmony import */ var _actions_http_client__WEBPACK_IMPORTED_MODULE_5__ = __nccwpck_require__(6255);
+/* harmony import */ var _common_install_js__WEBPACK_IMPORTED_MODULE_6__ = __nccwpck_require__(2441);
+/* harmony import */ var _common_release_js__WEBPACK_IMPORTED_MODULE_7__ = __nccwpck_require__(9630);
+
+
 
 
 
@@ -27441,8 +27807,7 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 
 const IS_WINDOWS = process.platform === 'win32';
 
-// Where release downloads go. /tmp on Linux, as before; the runner's temp
-// directory on Windows.
+// Where the Windows release is downloaded: the runner's temp directory.
 const DOWNLOAD_DIR = IS_WINDOWS ? (process.env.RUNNER_TEMP || os__WEBPACK_IMPORTED_MODULE_3__.tmpdir()) : '/tmp';
 
 const CIMON_SCRIPT_DOWNLOAD_URL =
@@ -27451,61 +27816,72 @@ const CIMON_SCRIPT_PATH = '/tmp/install.sh';
 const CIMON_EXECUTABLE_DIR = '/tmp/cimon';
 const CIMON_EXECUTABLE_PATH = '/tmp/cimon/cimon';
 
-// For v1+, download a specific version from GitHub releases instead of S3 latest.
-const CIMON_RELEASES_GITHUB = 'https://github.com/CycodeLabs/cimon-releases/releases';
-
 async function getLatestV1Version() {
-    // Paginate through releases to find the latest v1.x tag.
-    // GitHub returns 30 per page by default; use 100 and check up to 5 pages.
+    // Page through releases (newest first) for the newest stable v1.x tag.
+    // GitHub's own "latest" is not used: v0 releases are still published
+    // from the v0 line, and release candidates (vX.Y.Z-rc...) are skipped.
     const baseUrl = 'https://api.github.com/repos/CycodeLabs/cimon-releases/releases';
     for (let page = 1; page <= 5; page++) {
         const response = await httpClient.getJson(
             `${baseUrl}?per_page=100&page=${page}`
         );
         const releases = response.result;
-        if (!releases || releases.length === 0) break;
+        if (!Array.isArray(releases) || releases.length === 0) break;
 
-        for (const release of releases) {
-            // Match v1.x.y but skip v1.x.y-rc1, v1.x.y-alpha, etc.
-            // Pre-releases on GitHub are fine (our release workflow marks
-            // all v1.x as pre-release to not override v0 latest).
-            if (release.tag_name &&
-                release.tag_name.startsWith('v1.') &&
-                !release.draft &&
-                !release.tag_name.includes('-')) {
-                return release.tag_name;
-            }
-        }
+        const tag = (0,_common_release_js__WEBPACK_IMPORTED_MODULE_7__/* .pickLatestV1 */ .UP)(releases);
+        if (tag) return tag;
     }
     throw new Error('No v1.x release found on cimon-releases');
 }
 
 async function installCosign() {
-    // Download cosign binary for signature verification.
-    const cosignVersion = 'v2.2.1';
-    const cosignAsset = IS_WINDOWS ? 'cosign-windows-amd64.exe' : 'cosign-linux-amd64';
-    const cosignUrl = `https://github.com/sigstore/cosign/releases/download/${cosignVersion}/${cosignAsset}`;
-    const cosignPath = path__WEBPACK_IMPORTED_MODULE_4__.join(DOWNLOAD_DIR, IS_WINDOWS ? 'cosign.exe' : 'cosign');
+    // Download cosign for signature verification, pinned by version and
+    // SHA256. A cosign already at this path (from an earlier step or job on
+    // a persistent runner) is reused only if it is the pinned binary.
+    const name = `cosign-linux-${process.arch === 'arm64' ? 'arm64' : 'amd64'}`;
+    const expected = _common_install_js__WEBPACK_IMPORTED_MODULE_6__/* .COSIGN_SHA256 */ .GS[name];
+    const cosignUrl = `https://github.com/sigstore/cosign/releases/download/${_common_install_js__WEBPACK_IMPORTED_MODULE_6__/* .COSIGN_VERSION */ ._t}/${name}`;
+    const cosignPath = '/tmp/cosign';
 
-    if (!fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(cosignPath)) {
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Installing cosign ${cosignVersion}...`);
+    if (!fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(cosignPath) || (await (0,_common_install_js__WEBPACK_IMPORTED_MODULE_6__/* .sha256File */ .ob)(cosignPath)) !== expected) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Installing cosign ${_common_install_js__WEBPACK_IMPORTED_MODULE_6__/* .COSIGN_VERSION */ ._t}...`);
         await downloadBinaryToFile(cosignUrl, cosignPath);
+        const actual = await (0,_common_install_js__WEBPACK_IMPORTED_MODULE_6__/* .sha256File */ .ob)(cosignPath);
+        if (actual !== expected) {
+            throw new Error(
+                `SHA256 mismatch for ${name} ${_common_install_js__WEBPACK_IMPORTED_MODULE_6__/* .COSIGN_VERSION */ ._t}: expected ` +
+                    `${expected}, got ${actual}. Refusing to run it.`
+            );
+        }
         fs__WEBPACK_IMPORTED_MODULE_2__.chmodSync(cosignPath, 0o755);
     }
     return cosignPath;
 }
 
-async function downloadV1Binary(version) {
+// downloadV1Binary downloads and verifies cimon `version`. With pinned set
+// (the version input chose it), a release that does not exist is a
+// ConfigError.
+async function downloadV1Binary(version, { pinned = false } = {}) {
     const arch = process.arch === 'arm64' ? 'arm64' : 'x86_64';
-    const baseUrl = `${CIMON_RELEASES_GITHUB}/download/${version}`;
-    // Windows releases ship only for x86_64, as a zip.
-    const tarName = IS_WINDOWS ? 'cimon_windows_x86_64.zip' : `cimon_linux_${arch}.tar.gz`;
-    const tarPath = path__WEBPACK_IMPORTED_MODULE_4__.join(DOWNLOAD_DIR, IS_WINDOWS ? 'cimon-v1.zip' : 'cimon-v1.tar.gz');
-    const checksumPath = path__WEBPACK_IMPORTED_MODULE_4__.join(DOWNLOAD_DIR, 'cimon-v1-checksums.txt');
-    const checksumSigPath = path__WEBPACK_IMPORTED_MODULE_4__.join(DOWNLOAD_DIR, 'cimon-v1-checksums.txt.sig');
+    const baseUrl = `${_common_release_js__WEBPACK_IMPORTED_MODULE_7__/* .CIMON_RELEASES_URL */ .GW}/download/${version}`;
+    const tarName = `cimon_linux_${arch}.tar.gz`;
+    const tarPath = '/tmp/cimon-v1.tar.gz';
+    const checksumPath = '/tmp/cimon-v1-checksums.txt';
+    const checksumSigPath = '/tmp/cimon-v1-checksums.txt.sig';
 
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Downloading cimon ${version} for ${arch}...`);
-    await downloadBinaryToFile(`${baseUrl}/${tarName}`, tarPath);
+    try {
+        await downloadBinaryToFile(`${baseUrl}/${tarName}`, tarPath);
+    } catch (error) {
+        // A missing tarball is almost always a mistyped or unpublished
+        // version; say so before the signature check reports it as an
+        // unsigned release.
+        const Kind = pinned && error.httpStatusCode === 404 ? _common_release_js__WEBPACK_IMPORTED_MODULE_7__/* .ConfigError */ .x1 : Error;
+        throw new Kind(
+            `Could not download cimon ${version} (${error.message}). Check ` +
+                `that ${version} is a published release at ${_common_release_js__WEBPACK_IMPORTED_MODULE_7__/* .CIMON_RELEASES_URL */ .GW}.`
+        );
+    }
     await downloadToFile(`${baseUrl}/checksums.txt`, checksumPath);
 
     // Step 1: Verify cosign signature on checksums.txt.
@@ -27533,18 +27909,10 @@ async function downloadV1Binary(version) {
 
     const cosignPath = await installCosign();
 
-    // The public key is embedded directly in code — not downloaded
-    // from the release (which an attacker could replace).
-    // This is Cycode's cosign public key (cosign generate-key-pair).
-    const COSIGN_PUB = [
-        '-----BEGIN PUBLIC KEY-----',
-        'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEm1mmcCICdlB5j78efKNbPK8Q0UeO',
-        'rDH1UNxhD2ibPuzUDV3OzpL8wVtTnWW1jLGMi7fKiZPfP+pB2BpdUPaMSg==',
-        '-----END PUBLIC KEY-----',
-        '',
-    ].join('\n');
-    const pubKeyPath = path__WEBPACK_IMPORTED_MODULE_4__.join(DOWNLOAD_DIR, 'cimon-cosign-verify.pub');
-    fs__WEBPACK_IMPORTED_MODULE_2__.writeFileSync(pubKeyPath, COSIGN_PUB);
+    // The public key ships inside the action, not with the release (which
+    // an attacker could replace).
+    const pubKeyPath = '/tmp/cimon-cosign-verify.pub';
+    fs__WEBPACK_IMPORTED_MODULE_2__.writeFileSync(pubKeyPath, _common_install_js__WEBPACK_IMPORTED_MODULE_6__/* .CIMON_COSIGN_PUBLIC_KEY */ .GH);
 
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Verifying cosign signature...');
     const verifyResult = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(cosignPath, [
@@ -27567,10 +27935,7 @@ async function downloadV1Binary(version) {
     // Step 2: Verify SHA256 checksum of the binary.
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Verifying SHA256 checksum...');
     const checksumContent = fs__WEBPACK_IMPORTED_MODULE_2__.readFileSync(checksumPath, 'utf8');
-    const expectedHash = checksumContent
-        .split('\n')
-        .filter(line => line.includes(tarName))
-        .map(line => line.split(/\s+/)[0])[0];
+    const expectedHash = (0,_common_install_js__WEBPACK_IMPORTED_MODULE_6__/* .checksumFor */ .oe)(checksumContent, tarName);
 
     if (!expectedHash) {
         throw new Error(`Checksum not found for ${tarName} in checksums.txt`);
@@ -27591,17 +27956,35 @@ async function downloadV1Binary(version) {
 
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Binary verified (cosign + SHA256): ${actualHash.substring(0, 16)}...`);
 
-    const extractDir = path__WEBPACK_IMPORTED_MODULE_4__.join(DOWNLOAD_DIR, 'cimon-v1');
+    const extractDir = '/tmp/cimon-v1';
     fs__WEBPACK_IMPORTED_MODULE_2__.mkdirSync(extractDir, { recursive: true });
-    if (IS_WINDOWS) {
-        // Windows' own tar.exe (bsdtar) extracts zip archives.
-        await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('tar', ['-xf', tarPath, '-C', extractDir]);
-        return path__WEBPACK_IMPORTED_MODULE_4__.join(extractDir, 'cimon.exe');
-    }
     await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('tar', ['-xzf', tarPath, '-C', extractDir]);
     fs__WEBPACK_IMPORTED_MODULE_2__.chmodSync(`${extractDir}/cimon`, 0o755);
 
     return `${extractDir}/cimon`;
+}
+
+// On Windows the release zip goes through the installer the attest action
+// uses: the cosign signature on checksums.txt, then the zip's SHA256, before
+// anything is extracted. There is no Windows install script.
+async function downloadWindowsBinary(version, { pinned = false } = {}) {
+    return (0,_common_install_js__WEBPACK_IMPORTED_MODULE_6__/* .installRelease */ .Uj)({
+        tag: version,
+        pinned,
+        workDir: path__WEBPACK_IMPORTED_MODULE_4__.join(DOWNLOAD_DIR, 'cimon-v1'),
+        log: (message) => _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(message),
+        download: downloadBinaryToFile,
+        run: (command, args) => _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(command, args, { ignoreReturnCode: true }),
+        // Windows' own tar.exe (bsdtar) extracts zip archives.
+        extract: async (archive, dest) => {
+            const code = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('tar', ['-xf', archive, '-C', dest], {
+                ignoreReturnCode: true,
+            });
+            if (code !== 0) {
+                throw new Error(`Extracting ${archive} failed (${code})`);
+            }
+        },
+    });
 }
 
 // The Windows agent observes builds through ETW and generates C/C++ SBOMs.
@@ -27649,6 +28032,12 @@ async function downloadToFile(url, filePath) {
 async function downloadBinaryToFile(url, filePath) {
     const response = await httpClient.get(url);
     const message = response.message;
+    if (message.statusCode !== 200) {
+        message.resume();
+        const error = new Error(`HTTP ${message.statusCode} from ${url}`);
+        error.httpStatusCode = message.statusCode;
+        throw error;
+    }
     const chunks = [];
     await new Promise((resolve, reject) => {
         message.on('data', (chunk) => chunks.push(chunk));
@@ -27679,7 +28068,7 @@ function getActionConfig() {
             url: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('url'),
             featureGates: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getMultilineInput('feature-gates'),
             releasePath: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('release-path'),
-            version: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('cimon-version'),
+            version: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('version'),
             hardening: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('hardening') === 'true',
             hardeningTier: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('hardening-tier') || '2',
             hardeningDisabledRules: _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('hardening-disabled-rules') || '',
@@ -27719,50 +28108,71 @@ async function run(config) {
         verifyWindowsInputs(config);
     }
 
+    const release = (0,_common_release_js__WEBPACK_IMPORTED_MODULE_7__/* .resolveRelease */ .U)(
+        config.cimon.releasePath,
+        config.cimon.version
+    );
+    if (release.version !== '' && !release.version.startsWith('v1.')) {
+        throw new _common_release_js__WEBPACK_IMPORTED_MODULE_7__/* .ConfigError */ .x1(
+            `version ${release.version} is not supported: this action ` +
+                `runs cimon v1.x releases.`
+        );
+    }
     let releasePath;
 
-    if (config.cimon.releasePath != '') {
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(
-            `Running Cimon from release path: ${config.cimon.releasePath}`
-        );
+    if (release.releasePath !== '') {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Running Cimon from release path: ${release.releasePath}`);
 
-        if (!fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(config.cimon.releasePath)) {
+        if (!fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(release.releasePath)) {
             throw new Error(
-                `Cimon release path does not exist: ${config.cimon.releasePath}`
+                `Cimon release path does not exist: ${release.releasePath}`
             );
         }
 
-        releasePath = config.cimon.releasePath;
+        releasePath = release.releasePath;
     } else if (IS_WINDOWS) {
-        // There is no Windows install script; download the release zip and
-        // verify it the same way as the Linux v1 binary. cimon-version names
-        // another release, such as a release candidate, which the latest-v1
-        // lookup never picks.
-        const version = config.cimon.version || (await getLatestV1Version());
-        releasePath = await downloadV1Binary(version);
+        // The version input names a release, such as a release candidate,
+        // which the latest-v1 lookup never picks.
+        const version = release.version || (await getLatestV1Version());
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(
+            release.version !== ''
+                ? `Running Cimon ${version} (pinned by the version input)`
+                : `Running Cimon ${version}, the latest v1 release`
+        );
+        releasePath = await downloadWindowsBinary(version, {
+            pinned: release.version !== '',
+        });
+    } else if (release.version !== '') {
+        // A pinned version always takes the verified download (cosign
+        // signature on checksums.txt, then SHA256 of the tarball), with or
+        // without hardening. It also skips install.sh, so nothing fetched at
+        // run time decides which binary runs.
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Running Cimon ${release.version} (pinned by the version input)`);
+        releasePath = await downloadV1Binary(release.version, { pinned: true });
     } else if (config.cimon.hardening) {
         // Hardening requires v1.x binary. Auto-download latest v1.x release.
-        const version = config.cimon.version || (await getLatestV1Version());
+        const version = await getLatestV1Version();
         releasePath = await downloadV1Binary(version);
     } else {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running Cimon from latest release path');
 
-        if (!fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(CIMON_SCRIPT_PATH)) {
-            await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
-        }
+        // Install fresh on every run. Reusing an existing /tmp/cimon would
+        // run whatever release an earlier job left there on a persistent
+        // self-hosted runner, not the latest one.
+        fs__WEBPACK_IMPORTED_MODULE_2__.rmSync(CIMON_EXECUTABLE_DIR, { recursive: true, force: true });
+        fs__WEBPACK_IMPORTED_MODULE_2__.rmSync(CIMON_SCRIPT_PATH, { force: true });
+        await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
 
-        if (!fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(CIMON_EXECUTABLE_DIR)) {
-            let params = [CIMON_SCRIPT_PATH, '-b', CIMON_EXECUTABLE_DIR];
-            if (
-                config.cimon.logLevel == 'debug' ||
-                config.cimon.logLevel == 'trace'
-            ) {
-                params.push('-d');
-            }
-            let retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sh', params);
-            if (retval !== 0) {
-                throw new Error(`Failed installing Cimon: ${retval}`);
-            }
+        let params = [CIMON_SCRIPT_PATH, '-b', CIMON_EXECUTABLE_DIR];
+        if (
+            config.cimon.logLevel == 'debug' ||
+            config.cimon.logLevel == 'trace'
+        ) {
+            params.push('-d');
+        }
+        let retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sh', params);
+        if (retval !== 0) {
+            throw new Error(`Failed installing Cimon: ${retval}`);
         }
 
         releasePath = CIMON_EXECUTABLE_PATH;
@@ -27883,7 +28293,9 @@ try {
     const failOnError = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('fail-on-error');
     const log = error.message;
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.error(`Cimon action error: ${log}`);
-    if (failOnError) {
+    // A mistake in the version input fails the step whatever fail-on-error
+    // says (see ConfigError).
+    if (failOnError || (0,_common_release_js__WEBPACK_IMPORTED_MODULE_7__/* .isConfigError */ .yb)(error)) {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.setFailed(log);
     }
 }

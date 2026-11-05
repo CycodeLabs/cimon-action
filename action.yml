@@ -79,12 +79,23 @@ inputs:
     description: Fail the CI if Cimon encountered an error
     required: false
     default: 'false'
-  cimon-version:
-    description: A cimon release to download (a tag of CycodeLabs/cimon-releases, such as a release candidate) instead of the latest v1 release. Used on Windows and with hardening, and verified the same way. Ignored when release-path is set
+  version:
+    description: |
+      Cimon release to run, as a tag from
+      https://github.com/CycodeLabs/cimon-releases/releases (for example
+      v1.0.28; the leading "v" is optional). Empty or "latest" runs the latest
+      release, resolved each time the action runs. Set it to upgrade on your
+      own schedule. A pinned release is checked against its signed checksums
+      before it runs. Requires a v1.x release. Cannot be combined with
+      release-path. An invalid or unknown version fails the step even with
+      fail-on-error set to false.
     required: false
     default: ''
   release-path:
-    description: Path to Cimon release file (Used for debugging)
+    description: |
+      Path to a Cimon binary already on the runner. When set, the action runs
+      that binary and downloads nothing. Use it to run a binary you have
+      scanned and staged yourself. Cannot be combined with version.
     required: false
     default: ''
   hardening:

@@ -9,6 +9,7 @@ on:
       - 'attest/index.js'
       - 'attest/package.json'
       - 'attest/package-lock.json'
+      - 'src/common/**'
       - '.github/workflows/build-attest-dist.yaml'
   workflow_dispatch:
 

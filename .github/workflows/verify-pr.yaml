@@ -119,8 +119,8 @@ jobs:
         env:
           OUTCOME: ${{ steps.cimon.outcome }}
         run: |
-          $exe = Join-Path $env:RUNNER_TEMP 'cimon-v1\cimon.exe'
-          if (-not (Test-Path (Join-Path $env:RUNNER_TEMP 'cosign.exe'))) { throw 'cosign was not installed to verify the release' }
+          $exe = Join-Path $env:RUNNER_TEMP 'cimon-v1\cimon\cimon.exe'
+          if (-not (Test-Path (Join-Path $env:RUNNER_TEMP 'cimon-v1\cosign-windows-amd64.exe'))) { throw 'cosign was not installed to verify the release' }
           # The archive is unpacked only after its signature and digest check.
           if (-not (Test-Path $exe)) { throw "the release was not unpacked to $exe" }
           & $exe attest --help | Out-Null
@@ -135,7 +135,7 @@ jobs:
 
   verify-agent-windows-rc:
     # A Windows job as a customer tests a release candidate: the action
-    # downloads it by cimon-version, verified like a release, and starts the
+    # downloads it by the version input, verified like a release, and starts the
     # agent, authenticated, with keyless SBOM signing; a CMake build with MSVC
     # and Ninja then gets a signed SBOM. verify-agent-windows-rc-artifacts
     # checks what the job left behind.
@@ -157,7 +157,7 @@ jobs:
         with:
           client-id: ${{ secrets.CIMON_CLIENT_ID }}
           secret: ${{ secrets.CIMON_SECRET }}
-          cimon-version: ${{ env.CIMON_RC }}
+          version: ${{ env.CIMON_RC }}
           log-level: debug
           fail-on-error: true
           sbom-artifact-name: cimon-sbom-rc
@@ -226,11 +226,50 @@ jobs:
           [ -z "$hint" ] || { echo "::error::the diagnosis has a hint: $hint"; exit 1; }
           echo "The release candidate $version wrote and signed the SBOM of sample.exe ($(jq '.components | length' "$cdx") components)."
 
+  verify-attest-macos:
+    # On macOS the attest action downloads the latest release, verifies the
+    # cosign signature on its checksums.txt and the archive's SHA256, then
+    # runs it. Keyed signing, as on Windows.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
+
+      - name: Build sample artifact and signing key
+        run: |
+          mkdir -p dist
+          echo "fake-macos-binary-$(date -u +%s)" > dist/sample
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out private-key.pem
+
+      - name: Cimon Attest (macOS, keyed)
+        uses: ./attest
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret:    ${{ secrets.CIMON_SECRET }}
+          subjects:  dist/sample
+          sign-key:  private-key.pem
+          report-job-summary: true
+          report-artifact:    false
+          fail-on-error:      true
+
+      - name: Show provenance
+        run: |
+          cat provenance.intoto.jsonl
+          ls -l provenance.intoto.jsonl.sig
+
   verify:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout Code
         uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
+
+      # A binary an earlier job left at the install path must not be reused:
+      # without a version the action installs the latest release every run.
+      # If it ran this one, starting the agent would fail the next step.
+      - name: Leave a stale binary at the install path
+        run: |
+          mkdir -p /tmp/cimon
+          printf '#!/bin/sh\necho "stale binary was reused" >&2\nexit 1\n' > /tmp/cimon/cimon
+          chmod +x /tmp/cimon/cimon
 
       - name: Run Cimon
         uses: ./
@@ -356,3 +395,161 @@ jobs:
           curl -I https://api.github.com
           curl -I https://cycode.com
           wget --quiet --timeout 1 https://registry.npmjs.org || true
+
+  # The version input pins the Cimon release instead of running the latest
+  # one. PINNED_VERSION is deliberately older than the latest release, and
+  # each job compares the binary the action ran with the one in that
+  # release, so the test fails if the action falls back to the latest.
+  verify-pinned-version:
+    runs-on: ubuntu-22.04
+    env:
+      PINNED_VERSION: v1.0.27
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
+
+      - name: Run Cimon (pinned)
+        uses: ./
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
+          version: ${{ env.PINNED_VERSION }}
+          fail-on-error: true
+
+      # The action starts the agent from /tmp/cimon-v1/cimon after verifying
+      # it, and fail-on-error fails the previous step if the start fails.
+      - name: Check the pinned binary ran
+        run: |
+          curl -sSfL -o expected.tar.gz \
+            "https://github.com/CycodeLabs/cimon-releases/releases/download/${PINNED_VERSION}/cimon_linux_x86_64.tar.gz"
+          mkdir expected && tar -xzf expected.tar.gz -C expected
+          cmp expected/cimon /tmp/cimon-v1/cimon
+
+  verify-attest-pinned-linux:
+    runs-on: ubuntu-22.04
+    env:
+      PINNED_VERSION: v1.0.27
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
+
+      - name: Create Private Key and Artifact
+        run: |
+          openssl genrsa -out private-key.pem 3072
+          echo artifact > artifact.txt
+
+      - name: Run Cimon Attest (pinned)
+        id: attest
+        uses: ./attest
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
+          subjects: artifact.txt
+          sign-key: private-key.pem
+          version: ${{ env.PINNED_VERSION }}
+          report-artifact: false
+          fail-on-error: true
+
+      - name: Check the pinned binary ran
+        env:
+          CIMON_RAN: ${{ steps.attest.outputs.cimon-path }}
+        run: |
+          curl -sSfL -o expected.tar.gz \
+            "https://github.com/CycodeLabs/cimon-releases/releases/download/${PINNED_VERSION}/cimon_linux_x86_64.tar.gz"
+          mkdir expected && tar -xzf expected.tar.gz -C expected
+          cmp expected/cimon "$CIMON_RAN"
+
+      - name: Run Cimon Attest with both release-path and version
+        id: conflict
+        continue-on-error: true
+        uses: ./attest
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
+          subjects: artifact.txt
+          sign-key: private-key.pem
+          release-path: ${{ steps.attest.outputs.cimon-path }}
+          version: ${{ env.PINNED_VERSION }}
+          report-artifact: false
+          fail-on-error: true
+
+      - name: Check that combination was rejected
+        if: steps.conflict.outcome != 'failure'
+        run: |
+          echo "::error::release-path together with version should fail the step"
+          exit 1
+
+      # A version that does not exist is an input mistake: it fails the
+      # step even with fail-on-error: false.
+      - name: Run Cimon Attest with a version that does not exist
+        id: unknown
+        continue-on-error: true
+        uses: ./attest
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
+          subjects: artifact.txt
+          sign-key: private-key.pem
+          version: v1.0.999
+          report-artifact: false
+          fail-on-error: false
+
+      - name: Check the unknown version failed the step
+        if: steps.unknown.outcome != 'failure'
+        run: |
+          echo "::error::an unknown version should fail the step even with fail-on-error: false"
+          exit 1
+
+  verify-attest-pinned-windows:
+    runs-on: windows-latest
+    env:
+      PINNED_VERSION: v1.0.27
+    steps:
+      - uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
+
+      - name: Build sample Windows artifact and signing key
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Set-Content -Path dist/sample.exe -Value "fake-windows-binary-$(Get-Date -Format o)"
+          & "C:\Program Files\Git\usr\bin\openssl.exe" genrsa -out private-key.pem 3072
+
+      # The leading "v" is optional; leaving it out also tests that.
+      - name: Cimon Attest (Windows, pinned)
+        id: attest
+        uses: ./attest
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret:    ${{ secrets.CIMON_SECRET }}
+          subjects:  dist\sample.exe
+          sign-key:  private-key.pem
+          version:   1.0.27
+          report-artifact: false
+          fail-on-error:   true
+
+      # A second attest step in the same job installs its own binary and
+      # leaves the first step's install, and cimon-path, alone.
+      - name: Cimon Attest (Windows, latest, second step)
+        id: attest_latest
+        uses: ./attest
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret:    ${{ secrets.CIMON_SECRET }}
+          subjects:  dist\sample.exe
+          sign-key:  private-key.pem
+          report-artifact: false
+          fail-on-error:   true
+
+      - name: Check the pinned binary ran
+        shell: pwsh
+        env:
+          CIMON_RAN: ${{ steps.attest.outputs.cimon-path }}
+          CIMON_LATEST: ${{ steps.attest_latest.outputs.cimon-path }}
+        run: |
+          if ($env:CIMON_RAN -eq $env:CIMON_LATEST) { throw "both attest steps reported the same cimon-path: $env:CIMON_RAN" }
+          $url = "https://github.com/CycodeLabs/cimon-releases/releases/download/$env:PINNED_VERSION/cimon_windows_x86_64.zip"
+          Invoke-WebRequest $url -OutFile expected.zip
+          Expand-Archive expected.zip -DestinationPath expected
+          $want = (Get-FileHash expected\cimon.exe -Algorithm SHA256).Hash
+          $got  = (Get-FileHash $env:CIMON_RAN -Algorithm SHA256).Hash
+          if ($want -ne $got) { throw "the action ran $got, expected $env:PINNED_VERSION ($want)" }

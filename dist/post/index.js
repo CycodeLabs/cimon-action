@@ -127731,9 +127731,9 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(57147);
 /* harmony import */ var os__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(22037);
 /* harmony import */ var path__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(71017);
-/* harmony import */ var _actions_http_client__WEBPACK_IMPORTED_MODULE_5__ = __nccwpck_require__(96255);
-/* harmony import */ var _actions_artifact__WEBPACK_IMPORTED_MODULE_6__ = __nccwpck_require__(79450);
+/* harmony import */ var _actions_artifact__WEBPACK_IMPORTED_MODULE_5__ = __nccwpck_require__(79450);
 /* harmony import */ var _sbom_summary_js__WEBPACK_IMPORTED_MODULE_7__ = __nccwpck_require__(29021);
+/* harmony import */ var _stop_binary_js__WEBPACK_IMPORTED_MODULE_6__ = __nccwpck_require__(91661);
 
 
 
@@ -127742,20 +127742,6 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 
 
 
-
-const CIMON_SCRIPT_DOWNLOAD_URL =
-    'https://cimon-releases.s3.amazonaws.com/install.sh';
-const CIMON_SCRIPT_PATH = '/tmp/install.sh';
-const CIMON_EXECUTABLE_DIR = '/tmp/cimon';
-const CIMON_EXECUTABLE_PATH = '/tmp/cimon/cimon';
-
-const httpClient = new _actions_http_client__WEBPACK_IMPORTED_MODULE_5__.HttpClient('cimon-action');
-
-async function downloadToFile(url, filePath) {
-    const response = await httpClient.get(url);
-    const responseBody = await response.readBody();
-    fs__WEBPACK_IMPORTED_MODULE_2__.writeFileSync(filePath, responseBody);
-}
 
 function getActionConfig() {
     return {
@@ -127776,29 +127762,6 @@ async function sudoExists() {
     }
 }
 
-/**
- * Determines the Cimon executable path.
- * Prefers the release-path saved by the main step so the same binary
- * is used for both start and stop.
- *
- * Backward compatibility: when the main step was run by an older version
- * of cimon-action that did not call core.saveState('release-path', ...),
- * core.getState() returns '' and we fall back to the default S3-downloaded
- * binary at /tmp/cimon/cimon — exactly the same behavior as before.
- */
-function getCimonPath() {
-    const savedPath = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getState('release-path');
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Post step: saved release-path = '${savedPath}'`);
-    if (savedPath && fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(savedPath)) {
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Using saved release path: ${savedPath}`);
-        return savedPath;
-    }
-    if (savedPath) {
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Saved path '${savedPath}' does not exist on disk, falling back`);
-    }
-    return CIMON_EXECUTABLE_PATH;
-}
-
 async function run(config) {
     const isWindows = process.platform === 'win32';
 
@@ -127812,36 +127775,16 @@ async function run(config) {
         return;
     }
 
-    const cimonPath = getCimonPath();
-
-    // On Windows the main step saves the path of the cimon.exe it started,
-    // and there is no install script to fall back to. Without one, the main
-    // step stopped before starting the agent.
-    if (isWindows && !fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(cimonPath)) {
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Cimon agent was not started; nothing to stop');
+    // Stop with the same binary the main step started, and never install
+    // another release here: see stop-binary.js.
+    const savedPath = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getState('release-path');
+    const binary = (0,_stop_binary_js__WEBPACK_IMPORTED_MODULE_6__/* .stopBinary */ .X)(savedPath, fs__WEBPACK_IMPORTED_MODULE_2__.existsSync);
+    if (binary.skip) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(binary.skip);
         return;
     }
-
-    // Ensure the Cimon binary is available (fallback: download from S3).
-    if (!fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(cimonPath)) {
-        if (!fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(CIMON_SCRIPT_PATH)) {
-            await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
-        }
-
-        if (!fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(CIMON_EXECUTABLE_DIR)) {
-            let params = [CIMON_SCRIPT_PATH, '-b', CIMON_EXECUTABLE_DIR];
-            if (
-                config.cimon.logLevel == 'debug' ||
-                config.cimon.logLevel == 'trace'
-            ) {
-                params.push('-d');
-            }
-            let retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sh', params);
-            if (retval !== 0) {
-                throw new Error(`Failed installing Cimon: ${retval}`);
-            }
-        }
-    }
+    const cimonPath = binary.path;
+    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Stopping Cimon with ${cimonPath}`);
 
     const env = {
         ...process.env,
@@ -127974,7 +127917,7 @@ async function uploadSBOMArtifacts(sbomEntries, artifactName) {
     }
 
     try {
-        const artifact = new _actions_artifact__WEBPACK_IMPORTED_MODULE_6__.DefaultArtifactClient();
+        const artifact = new _actions_artifact__WEBPACK_IMPORTED_MODULE_5__.DefaultArtifactClient();
         const { id, size } = await artifact.uploadArtifact(
             artifactName,
             filesToUpload,
@@ -127998,7 +127941,7 @@ async function uploadAgentLog(stopOutput) {
         const dir = fs__WEBPACK_IMPORTED_MODULE_2__.mkdtempSync(path__WEBPACK_IMPORTED_MODULE_4__.join(process.env.RUNNER_TEMP || os__WEBPACK_IMPORTED_MODULE_3__.tmpdir(), 'cimon-agent-log-'));
         const file = path__WEBPACK_IMPORTED_MODULE_4__.join(dir, 'cimon-agent.log');
         fs__WEBPACK_IMPORTED_MODULE_2__.writeFileSync(file, stopOutput);
-        const artifact = new _actions_artifact__WEBPACK_IMPORTED_MODULE_6__.DefaultArtifactClient();
+        const artifact = new _actions_artifact__WEBPACK_IMPORTED_MODULE_5__.DefaultArtifactClient();
         // One per job: a workflow run's artifacts need distinct names.
         const name = process.env.GITHUB_JOB ? `cimon-agent-log-${process.env.GITHUB_JOB}` : 'cimon-agent-log';
         const { id } = await artifact.uploadArtifact(name, [file], dir, { retentionDays: 30 });
@@ -128316,6 +128259,43 @@ async function writeSBOMSummary(core, sbomEntries, options = {}) {
         .addTable(rows);
     if (explain) summary.addRaw(explain);
     await summary.write();
+}
+
+
+/***/ }),
+
+/***/ 91661:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
+
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   "X": () => (/* binding */ stopBinary)
+/* harmony export */ });
+// stopBinary decides which binary the post step runs `agent stop` with.
+//
+// The main step saves the release-path state only after it has resolved
+// (and, for downloads, verified) the binary, and the main and post steps
+// always come from the same copy of the action. So:
+//   - no saved path: the main step failed before a binary existed, no agent
+//     can be running, and the post step has nothing to do;
+//   - a saved path that exists: stop with that same binary;
+//   - a saved path that is gone: fail rather than install some other
+//     release, which could differ from the one the workflow selected.
+//
+// Returns { path } or { skip: reason }, or throws.
+function stopBinary(savedPath, exists) {
+    if (!savedPath) {
+        return {
+            skip:
+                'The main step did not install Cimon, so there is no agent to stop.',
+        };
+    }
+    if (!exists(savedPath)) {
+        throw new Error(
+            `The Cimon binary the main step ran (${savedPath}) no longer ` +
+                `exists, so the agent cannot be stopped.`
+        );
+    }
+    return { path: savedPath };
 }
 
 
