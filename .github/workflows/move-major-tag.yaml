@@ -1,0 +1,98 @@
+name: Move the major version tag
+
+# Points the major version tag (v1) at the latest stable release, so workflows
+# that use cycodelabs/cimon-action@v1 or cycodelabs/cimon-action/attest@v1 run
+# it, the way cimon's release moves the v0 and v1 image tags. Runs when a
+# release is published and GitHub marks it as the latest release; prereleases
+# never move the tag. A manual run points it at a given release, for example to
+# roll back. Pull requests that change this file run it without writing.
+#
+# The tag is written through the Git data API, as an annotated tag on the
+# release commit. GitHub may refuse that from the workflow token when the
+# commit's .github/workflows differ from every branch tip (for example a move
+# to an older release); a MAJOR_TAG_TOKEN secret with contents and workflows
+# write access is used instead when it is set.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release to point the major tag at, for example v1.0.5
+        required: true
+  pull_request:
+    paths:
+      - '.github/workflows/move-major-tag.yaml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: move-major-tag
+  cancel-in-progress: false
+
+jobs:
+  move:
+    name: Move the major version tag
+    if: github.event_name != 'release' || !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    steps:
+      - name: Move the major tag
+        env:
+          GH_TOKEN: ${{ secrets.MAJOR_TAG_TOKEN || github.token }}
+          EVENT: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          DRY_RUN: ${{ github.event_name == 'pull_request' }}
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          case "$EVENT" in
+            release) tag="$RELEASE_TAG" ;;
+            workflow_dispatch) tag="$INPUT_TAG" ;;
+            *) tag=$(gh api "repos/$repo/releases/latest" --jq .tag_name) ;;
+          esac
+          if [[ ! "$tag" =~ ^v([0-9]+)\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::$tag is not a vX.Y.Z release tag"
+            exit 1
+          fi
+          major="v${BASH_REMATCH[1]}"
+
+          if ! gh api "repos/$repo/releases/tags/$tag" --jq .tag_name >/dev/null; then
+            echo "::error::there is no published release $tag"
+            exit 1
+          fi
+          if [ "$EVENT" = release ]; then
+            latest=$(gh api "repos/$repo/releases/latest" --jq .tag_name)
+            if [ "$latest" != "$tag" ]; then
+              echo "$tag is not the latest release ($latest), so $major stays where it is."
+              exit 0
+            fi
+          fi
+
+          commit=$(gh api "repos/$repo/commits/$tag" --jq .sha)
+          before=$(gh api "repos/$repo/commits/$major" --jq .sha 2>/dev/null || echo none)
+          echo "$major: $before -> $commit ($tag)"
+          if [ "$before" = "$commit" ]; then
+            echo "$major already points at $tag."
+            exit 0
+          fi
+          if [ "$DRY_RUN" = true ]; then
+            echo "Dry run: $major is not moved."
+            exit 0
+          fi
+
+          object=$(gh api "repos/$repo/git/tags" -f tag="$major" -f message="cimon-action $major" \
+            -f object="$commit" -f type=commit --jq .sha)
+          if [ "$before" = none ]; then
+            gh api "repos/$repo/git/refs" -f ref="refs/tags/$major" -f sha="$object" >/dev/null
+          else
+            gh api -X PATCH "repos/$repo/git/refs/tags/$major" -f sha="$object" -F force=true >/dev/null
+          fi
+          after=$(gh api "repos/$repo/commits/$major" --jq .sha)
+          if [ "$after" != "$commit" ]; then
+            echo "::error::$major points at $after after the move, expected $commit"
+            exit 1
+          fi
+          echo "Moved \`$major\` from \`$before\` to \`$tag\` (\`$commit\`)." >> "$GITHUB_STEP_SUMMARY"
