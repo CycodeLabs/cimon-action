@@ -144,7 +144,7 @@ jobs:
       contents: read
       id-token: write
     env:
-      CIMON_RC: v1.0.30-rc-windows-1
+      CIMON_RC: v1.0.30-rc-windows-2
       CIMON_SBOM_ENABLED: 'true'
       CIMON_SBOM_SIGN_ENABLED: 'true'
       CIMON_KEYLESS: 'true'
@@ -197,7 +197,7 @@ jobs:
     needs: verify-agent-windows-rc
     runs-on: ubuntu-22.04
     env:
-      CIMON_RC: v1.0.30-rc-windows-1
+      CIMON_RC: v1.0.30-rc-windows-2
     steps:
       - name: Download what the job left
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
