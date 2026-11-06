@@ -40,6 +40,77 @@ export function parseSBOMEntries(output) {
 }
 
 /**
+ * Parses the Windows agent's SBOM diagnosis from cimon agent stop output:
+ * its hint, which says why a job has no SBOM or what to check (empty when
+ * everything worked), what each build it followed came to, and examples of
+ * linker runs no followed build observed.
+ *
+ * @param {string} output - Combined stdout+stderr from `cimon agent stop`.
+ * @returns {{hint: string, builds: Array<{buildSystem: string, dir: string, outcome: string, detail: string}>, linkerExamples: string[]} | null}
+ *   null when the agent logged no diagnosis (Linux, or older cimon versions).
+ */
+export function parseSBOMDiagnosis(output) {
+    let hint = null;
+    const builds = [];
+    let linkerExamples = [];
+    for (const line of output.split('\n')) {
+        if (!line.includes('"SBOM diagnosis')) continue;
+        let parsed;
+        try {
+            parsed = JSON.parse(line);
+        } catch {
+            continue;
+        }
+        const message = parsed.message ?? parsed.msg;
+        if (message === 'SBOM diagnosis') {
+            hint = parsed.hint || '';
+        } else if (message === 'SBOM diagnosis: build') {
+            builds.push({
+                buildSystem: parsed.buildSystem || '',
+                dir: parsed.dir || '',
+                outcome: parsed.outcome || '',
+                detail: parsed.detail || '',
+            });
+        } else if (message === 'SBOM diagnosis: linker runs') {
+            linkerExamples = parsed.examples || [];
+        }
+    }
+    if (hint === null) return null;
+    return { hint, builds, linkerExamples };
+}
+
+function escapeHTML(text) {
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+/**
+ * Renders the agent's diagnosis for the job summary: its hint, the builds
+ * that got no SBOM and why, and the linker runs no followed build observed.
+ */
+function diagnosisHTML(diagnosis) {
+    let html = `<p><strong>Why:</strong> ${escapeHTML(diagnosis.hint)}</p>\n`;
+    const unwritten = diagnosis.builds.filter((b) => b.outcome !== 'sbom written');
+    if (unwritten.length > 0) {
+        html += '<p>Builds without an SBOM:</p>\n<ul>\n';
+        for (const b of unwritten) {
+            html += `<li>${escapeHTML(b.buildSystem)} build in <code>${escapeHTML(b.dir)}</code>: ${escapeHTML(b.outcome)} (${escapeHTML(b.detail)})</li>\n`;
+        }
+        html += '</ul>\n';
+    }
+    if (diagnosis.linkerExamples.length > 0) {
+        html += '<p>Linker runs outside the builds the agent followed:</p>\n<ul>\n';
+        for (const example of diagnosis.linkerExamples) {
+            html += `<li><code>${escapeHTML(example)}</code></li>\n`;
+        }
+        html += '</ul>\n';
+    }
+    return html;
+}
+
+/**
  * Checks whether the cimon stop output indicates that SBOM generation
  * was enabled (i.e. the feature was active, regardless of whether any
  * SBOMs were actually produced).
@@ -90,7 +161,8 @@ export function filterMeaningfulEntries(entries) {
  * @param {{sbomEnabled: boolean}} options
  */
 export async function writeSBOMSummary(core, sbomEntries, options = {}) {
-    const { sbomEnabled = false } = options;
+    const { sbomEnabled = false, diagnosis = null } = options;
+    const explain = diagnosis && diagnosis.hint ? diagnosisHTML(diagnosis) : '';
 
     // Case 3: SBOM not enabled — nothing to report.
     if (sbomEntries.length === 0 && !sbomEnabled) return;
@@ -100,8 +172,10 @@ export async function writeSBOMSummary(core, sbomEntries, options = {}) {
         await core.summary
             .addHeading('Cimon SBOM Report', 2)
             .addRaw(
-                'SBOM generation was enabled but no SBOMs were produced. ' +
-                    'This can happen when no build artifacts (executables or libraries) were detected during the build.\n'
+                explain
+                    ? 'SBOM generation was enabled but no SBOMs were produced.\n' + explain
+                    : 'SBOM generation was enabled but no SBOMs were produced. ' +
+                          'This can happen when no build artifacts (executables or libraries) were detected during the build.\n'
             )
             .write();
         return;
@@ -172,9 +246,10 @@ export async function writeSBOMSummary(core, sbomEntries, options = {}) {
         rows.push(row);
     }
 
-    await core.summary
+    const summary = core.summary
         .addHeading('Cimon SBOM Report', 2)
         .addRaw(parts.join(', ') + '.\n\n')
-        .addTable(rows)
-        .write();
+        .addTable(rows);
+    if (explain) summary.addRaw(explain);
+    await summary.write();
 }

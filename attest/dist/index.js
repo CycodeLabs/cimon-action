@@ -127947,7 +127947,7 @@ async function run(config) {
             path__WEBPACK_IMPORTED_MODULE_5__.dirname(config.attest.provenanceOutput),
             { continueOnError: true }
         );
-        if (keyBasedSigning(config)) {
+        if (keyBasedSigning(config) || config.attest.keyless) {
             client.uploadArtifact(
                 `signed-provenance-${jobId}-${randomSuffix}`,
                 [config.attest.signedProvenanceOutput],
@@ -127960,9 +127960,10 @@ async function run(config) {
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Build runtime SLSA provenance finished successfully`);
 
     // Optional SBOM attestation: wrap an SBOM produced by another tool in a
-    // signed in-toto statement over the same subjects. On Windows/macOS
-    // the agent (automatic SBOM generation) does not exist, so this is the
-    // only way to get an SBOM attestation there. The path is checked only
+    // signed in-toto statement over the same subjects. On macOS the agent
+    // (automatic SBOM generation) does not exist, so this is the only way to
+    // get an SBOM attestation there; on Linux and Windows the agent signs the
+    // SBOMs it generates itself. The path is checked only
     // here, after the provenance run, so a bad value for this optional
     // input never blocks the provenance attestation.
     if (config.attest.sbom !== '') {

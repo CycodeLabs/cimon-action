@@ -1,12 +1,15 @@
 import core from '@actions/core';
 import exec from '@actions/exec';
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import * as http from '@actions/http-client';
 import {
     CIMON_COSIGN_PUBLIC_KEY,
     COSIGN_SHA256,
     checksumFor,
     COSIGN_VERSION,
+    installRelease,
     sha256File,
 } from '../common/install.js';
 import {
@@ -16,6 +19,11 @@ import {
     pickLatestV1,
     resolveRelease,
 } from '../common/release.js';
+
+const IS_WINDOWS = process.platform === 'win32';
+
+// Where the Windows release is downloaded: the runner's temp directory.
+const DOWNLOAD_DIR = IS_WINDOWS ? (process.env.RUNNER_TEMP || os.tmpdir()) : '/tmp';
 
 const CIMON_SCRIPT_DOWNLOAD_URL =
     'https://cimon-releases.s3.amazonaws.com/install.sh';
@@ -171,6 +179,61 @@ async function downloadV1Binary(version, { pinned = false } = {}) {
     return `${extractDir}/cimon`;
 }
 
+// On Windows the release zip goes through the installer the attest action
+// uses: the cosign signature on checksums.txt, then the zip's SHA256, before
+// anything is extracted. There is no Windows install script.
+async function downloadWindowsBinary(version, { pinned = false } = {}) {
+    return installRelease({
+        tag: version,
+        pinned,
+        workDir: path.join(DOWNLOAD_DIR, 'cimon-v1'),
+        log: (message) => core.info(message),
+        download: downloadBinaryToFile,
+        run: (command, args) => exec.exec(command, args, { ignoreReturnCode: true }),
+        // Windows' own tar.exe (bsdtar) extracts zip archives.
+        extract: async (archive, dest) => {
+            const code = await exec.exec('tar', ['-xf', archive, '-C', dest], {
+                ignoreReturnCode: true,
+            });
+            if (code !== 0) {
+                throw new Error(`Extracting ${archive} failed (${code})`);
+            }
+        },
+    });
+}
+
+// The Windows agent observes builds through ETW and generates C/C++ SBOMs.
+// It has no hardening, network policy, file integrity or memory protection,
+// so asking for them is an error rather than a silent no-op.
+function verifyWindowsInputs(config) {
+    const unsupported = [];
+    if (config.cimon.preventionMode) unsupported.push('prevent');
+    if (config.cimon.hardening) unsupported.push('hardening');
+    if (config.cimon.fileIntegrity) unsupported.push('file-integrity');
+    if (config.cimon.memoryProtection) unsupported.push('memory-protection');
+    if (unsupported.length > 0) {
+        throw new Error(
+            `On Windows, Cimon generates C/C++ SBOMs only; these inputs are ` +
+            `Linux-only: ${unsupported.join(', ')}.`
+        );
+    }
+}
+
+// Releases before the Windows agent shipped carry an attest-only cimon.exe.
+async function verifyWindowsAgent(releasePath) {
+    const retval = await exec.exec(releasePath, ['agent', '--help'], {
+        ignoreReturnCode: true,
+        silent: true,
+    });
+    if (retval !== 0) {
+        throw new Error(
+            `${releasePath} has no Windows agent. This cimon release is an ` +
+            `attest-only build; use a release that includes the Windows agent, ` +
+            `or set release-path to a cimon.exe that does.`
+        );
+    }
+}
+
 const httpClient = new http.HttpClient('cimon-action');
 
 async function downloadToFile(url, filePath) {
@@ -244,24 +307,32 @@ async function sudoExists() {
 }
 
 async function run(config) {
-    // The Cimon agent is built on eBPF and exists only for Linux. The
-    // Windows/macOS cimon releases are attest-only builds with no `agent`
-    // command, so bail out before downloading anything rather than
-    // failing later with `unknown command "agent" for "cimon-attest"`.
-    if (process.platform !== 'linux') {
+    // The Cimon agent runs on Linux (eBPF) and, for C/C++ SBOM generation
+    // only, on Windows (ETW). The macOS cimon release is an attest-only
+    // build with no `agent` command, so bail out before downloading
+    // anything rather than failing later with `unknown command "agent"`.
+    if (process.platform !== 'linux' && !IS_WINDOWS) {
         throw new Error(
-            `cimon-action runs the Cimon agent (runtime monitoring, hardening, ` +
-            `SBOM generation), which is built on eBPF and is Linux-only; this ` +
-            `runner is ${process.platform}. On Windows and macOS use the attest ` +
-            `sub-action (cycodelabs/cimon-action/attest@v1) for provenance and ` +
-            `SBOM attestation instead.`
+            `cimon-action runs the Cimon agent, which supports Linux and ` +
+            `Windows runners; this runner is ${process.platform}. On macOS ` +
+            `use the attest sub-action (cycodelabs/cimon-action/attest@v1) ` +
+            `for provenance and SBOM attestation instead.`
         );
+    }
+    if (IS_WINDOWS) {
+        verifyWindowsInputs(config);
     }
 
     const release = resolveRelease(
         config.cimon.releasePath,
         config.cimon.version
     );
+    if (release.version !== '' && !release.version.startsWith('v1.')) {
+        throw new ConfigError(
+            `version ${release.version} is not supported: this action ` +
+                `runs cimon v1.x releases.`
+        );
+    }
     let releasePath;
 
     if (release.releasePath !== '') {
@@ -274,17 +345,23 @@ async function run(config) {
         }
 
         releasePath = release.releasePath;
+    } else if (IS_WINDOWS) {
+        // The version input names a release, such as a release candidate,
+        // which the latest-v1 lookup never picks.
+        const version = release.version || (await getLatestV1Version());
+        core.info(
+            release.version !== ''
+                ? `Running Cimon ${version} (pinned by the version input)`
+                : `Running Cimon ${version}, the latest v1 release`
+        );
+        releasePath = await downloadWindowsBinary(version, {
+            pinned: release.version !== '',
+        });
     } else if (release.version !== '') {
         // A pinned version always takes the verified download (cosign
         // signature on checksums.txt, then SHA256 of the tarball), with or
         // without hardening. It also skips install.sh, so nothing fetched at
         // run time decides which binary runs.
-        if (!release.version.startsWith('v1.')) {
-            throw new ConfigError(
-                `version ${release.version} is not supported: this action ` +
-                    `runs cimon v1.x releases.`
-            );
-        }
         core.info(`Running Cimon ${release.version} (pinned by the version input)`);
         releasePath = await downloadV1Binary(release.version, { pinned: true });
     } else if (config.cimon.hardening) {
@@ -314,6 +391,14 @@ async function run(config) {
         }
 
         releasePath = CIMON_EXECUTABLE_PATH;
+    }
+
+    if (IS_WINDOWS) {
+        await verifyWindowsAgent(releasePath);
+        // MSBuild worker nodes otherwise outlive the build that started
+        // them, and a later build's links would run outside that build's
+        // process tree, where the agent cannot attribute them.
+        core.exportVariable('MSBUILDDISABLENODEREUSE', '1');
     }
 
     // Save release path so the post step uses the same binary for stop.
@@ -384,10 +469,14 @@ async function run(config) {
     }
 
     var retval;
-    const sudo = await sudoExists();
+    // GitHub-hosted Windows runners run elevated, which the Windows agent
+    // needs; a self-hosted runner's account that is not an administrator
+    // needs the kernel provider grant the docs describe. There is no sudo.
+    // start-background itself detaches the agent.
+    const sudo = !IS_WINDOWS && (await sudoExists());
     const options = {
         env,
-        detached: true,
+        detached: !IS_WINDOWS,
         silent: false,
     };
 
