@@ -31,11 +31,9 @@ top-level `cycodelabs/cimon-action@v1` action instead.
 ```
 
 The action automatically detects the runner platform and downloads the
-matching `cimon` binary (`cimon.exe` on Windows). On Windows and macOS it
-verifies the download before running it: the cosign signature on the
-release's `checksums.txt` against Cycode's release key, then the archive's
-SHA256. On Linux it installs through `install.sh`, which checks the
-archive's SHA256 against `checksums.txt`. The action uses
+matching `cimon` binary (`cimon.exe` on Windows). It verifies the download
+before running it: the cosign signature on the release's `checksums.txt`
+against Cycode's release key, then the archive's SHA256. The action uses
 `$RUNNER_TEMP` so it cooperates with on-prem GHES self-hosted runners
 that may not have `/tmp` writable.
 
@@ -68,6 +66,10 @@ then runs that binary and downloads nothing:
     sign-key: private-key.pem
     release-path: C:\Tools\cimon\v1.0.28\cimon.exe
 ```
+
+To find the latest release, the action asks the GitHub API with
+`github-token`, and tries again a few times if GitHub rate-limits or fails
+the request. A pinned `version` skips this lookup.
 
 An invalid or unknown version fails the step even with
 `fail-on-error: false`. `version` and `release-path` cannot be combined. Pinning the action itself
@@ -257,7 +259,7 @@ releases accept these inputs and produce no timestamp.
 | `signed-sbom-output` | Path for the signed SBOM attestation. Used only when `sbom` is set | `sbom.intoto.jsonl.sig` |
 | `report-job-summary` | Render provenance in the workflow job summary | `true` |
 | `report-artifact` | Upload provenance as a workflow artifact | `true` |
-| `github-token` | Token used for build metadata enrichment | `${{ github.token }}` |
+| `github-token` | Token used to look up the latest Cimon release under the job's own GitHub API rate limit, and for build metadata enrichment | `${{ github.token }}` |
 | `log-level` | `trace` / `debug` / `info` | `info` |
 | `fail-on-error` | Fail the step on attestation errors | `false` |
 

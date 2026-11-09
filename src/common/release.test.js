@@ -1,6 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { isConfigError, parseVersion, pickLatestV1, resolveRelease } from './release.js';
+import {
+    apiTokenFor,
+    CIMON_RELEASES_API,
+    isConfigError,
+    latestV1Tag,
+    parseVersion,
+    pickLatestV1,
+    resolveRelease,
+} from './release.js';
 
 describe('parseVersion', () => {
     it('treats empty and latest as the latest release', () => {
@@ -111,5 +119,209 @@ describe('ConfigError', () => {
         }
         assert.equal(isConfigError(new Error('network')), false);
         assert.equal(isConfigError(undefined), false);
+    });
+});
+
+describe('apiTokenFor', () => {
+    it('uses the token on github.com', () => {
+        assert.equal(apiTokenFor('ghs_x', 'https://github.com'), 'ghs_x');
+        assert.equal(apiTokenFor('ghs_x', undefined), 'ghs_x');
+        assert.equal(apiTokenFor('ghs_x', ''), 'ghs_x');
+    });
+
+    it('drops a token from another GitHub instance', () => {
+        assert.equal(apiTokenFor('ghs_x', 'https://ghes.example.com'), '');
+        assert.equal(apiTokenFor('ghs_x', 'https://acme.ghe.com'), '');
+        assert.equal(apiTokenFor('ghs_x', 'not a url'), '');
+    });
+
+    it('returns empty without a token', () => {
+        assert.equal(apiTokenFor('', 'https://github.com'), '');
+        assert.equal(apiTokenFor(undefined, 'https://github.com'), '');
+    });
+});
+
+describe('latestV1Tag', () => {
+    const noSleep = async () => {};
+    const page1 = [
+        { tag_name: 'v1.0.30-rc-windows-2', draft: false },
+        { tag_name: 'v1.0.29', draft: false },
+    ];
+    const ok = (releases) => ({
+        statusCode: 200,
+        headers: {},
+        body: JSON.stringify(releases),
+    });
+    const fail = (statusCode, headers = {}, message = 'API rate limit exceeded') => ({
+        statusCode,
+        headers,
+        body: JSON.stringify({ message }),
+    });
+
+    it('sends the token and returns the newest stable v1 tag', async () => {
+        const calls = [];
+        const tag = await latestV1Tag({
+            request: async (url, headers) => {
+                calls.push({ url, headers });
+                return ok(page1);
+            },
+            token: 'ghs_x',
+            sleep: noSleep,
+        });
+        assert.equal(tag, 'v1.0.29');
+        assert.equal(calls.length, 1);
+        assert.equal(calls[0].url, `${CIMON_RELEASES_API}?per_page=100&page=1`);
+        assert.equal(calls[0].headers.Authorization, 'Bearer ghs_x');
+    });
+
+    it('sends no Authorization header without a token', async () => {
+        let sent;
+        await latestV1Tag({
+            request: async (url, headers) => {
+                sent = headers;
+                return ok(page1);
+            },
+            sleep: noSleep,
+        });
+        assert.equal(sent.Authorization, undefined);
+    });
+
+    it('waits as long as retry-after asks before retrying', async () => {
+        const logged = [];
+        const slept = [];
+        let calls = 0;
+        const tag = await latestV1Tag({
+            request: async () => {
+                calls++;
+                return calls === 1 ? fail(429, { 'retry-after': '30' }) : ok(page1);
+            },
+            log: (message) => logged.push(message),
+            sleep: async (ms) => slept.push(ms),
+        });
+        assert.equal(tag, 'v1.0.29');
+        assert.deepEqual(slept, [30000]);
+        assert.match(logged[0], /HTTP 429 from https:\/\/api\.github\.com.*API rate limit exceeded/);
+        assert.match(logged[0], /retrying in 30s/);
+    });
+
+    it('waits until the reset when the limit is used up', async () => {
+        const slept = [];
+        let calls = 0;
+        const now = 1_000_000_000_000;
+        await latestV1Tag({
+            request: async () => {
+                calls++;
+                return calls === 1
+                    ? fail(403, {
+                          'x-ratelimit-remaining': '0',
+                          'x-ratelimit-reset': String(now / 1000 + 20),
+                      })
+                    : ok(page1);
+            },
+            sleep: async (ms) => slept.push(ms),
+            now: () => now,
+        });
+        assert.deepEqual(slept, [21000]);
+    });
+
+    it('fails at once when the limit resets later than the action waits', async () => {
+        const now = 1_000_000_000_000;
+        let calls = 0;
+        await assert.rejects(
+            latestV1Tag({
+                request: async () => {
+                    calls++;
+                    return fail(403, {
+                        'x-ratelimit-remaining': '0',
+                        'x-ratelimit-reset': String(now / 1000 + 40 * 60),
+                    });
+                },
+                sleep: noSleep,
+                now: () => now,
+            }),
+            (error) =>
+                error.statusCode === 403 &&
+                /HTTP 403 from .*rate-limited: GitHub asks to wait 41 min/.test(error.message)
+        );
+        assert.equal(calls, 1);
+    });
+
+    it('does not retry a 403 that is not a rate limit', async () => {
+        let calls = 0;
+        await assert.rejects(
+            latestV1Tag({
+                request: async () => {
+                    calls++;
+                    return fail(403, {}, 'Resource not accessible by integration');
+                },
+                sleep: noSleep,
+            }),
+            /HTTP 403 from .*Resource not accessible/
+        );
+        assert.equal(calls, 1);
+    });
+
+    it('retries network failures and server errors', async () => {
+        const responses = [
+            () => {
+                throw new Error('socket hang up');
+            },
+            () => fail(502, {}, 'Bad Gateway'),
+            () => ok(page1),
+        ];
+        const tag = await latestV1Tag({
+            request: async () => responses.shift()(),
+            sleep: noSleep,
+        });
+        assert.equal(tag, 'v1.0.29');
+    });
+
+    it('drops a token GitHub rejects and carries on without it', async () => {
+        const warned = [];
+        const sent = [];
+        const tag = await latestV1Tag({
+            request: async (url, headers) => {
+                sent.push(headers.Authorization);
+                return headers.Authorization ? fail(401, {}, 'Bad credentials') : ok(page1);
+            },
+            token: 'expired',
+            warn: (message) => warned.push(message),
+            sleep: noSleep,
+        });
+        assert.equal(tag, 'v1.0.29');
+        assert.deepEqual(sent, ['Bearer expired', undefined]);
+        assert.equal(warned.length, 1);
+    });
+
+    it('fails on a 401 without a token', async () => {
+        await assert.rejects(
+            latestV1Tag({
+                request: async () => fail(401, {}, 'Bad credentials'),
+                sleep: noSleep,
+            }),
+            /HTTP 401/
+        );
+    });
+
+    it('pages until it finds a stable v1 release', async () => {
+        const pages = {
+            1: [{ tag_name: 'v1.0.30-rc-windows-2', draft: false }],
+            2: [{ tag_name: 'v1.0.29', draft: false }],
+        };
+        const tag = await latestV1Tag({
+            request: async (url) => ok(pages[new URL(url).searchParams.get('page')] || []),
+            sleep: noSleep,
+        });
+        assert.equal(tag, 'v1.0.29');
+    });
+
+    it('fails when there is no v1 release', async () => {
+        await assert.rejects(
+            latestV1Tag({
+                request: async () => ok([]),
+                sleep: noSleep,
+            }),
+            /No v1.x release found/
+        );
     });
 });

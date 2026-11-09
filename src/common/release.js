@@ -1,14 +1,18 @@
 // Release selection shared by the agent action (src/main) and the attest
 // action (attest/). Both bundle this file with ncc.
 
+import { httpStatus, rateLimitWait, withRetry } from './retry.js';
+
 // A cimon-releases tag: v1.0.28, or a pre-release such as
 // v1.0.30-rc-windows-1. The leading "v" is optional in the input. The
-// pattern also keeps the value safe to place in a download URL and to pass
-// as an install.sh argument.
+// pattern also keeps the value safe to place in a download URL.
 const TAG_PATTERN = /^v?\d+\.\d+\.\d+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$/;
 
 export const CIMON_RELEASES_URL =
     'https://github.com/CycodeLabs/cimon-releases/releases';
+
+export const CIMON_RELEASES_API =
+    'https://api.github.com/repos/CycodeLabs/cimon-releases/releases';
 
 // ConfigError marks a mistake in the release selection: a version that is
 // not a release tag, does not exist, or is set together with release-path.
@@ -81,4 +85,143 @@ export function pickLatestV1(releases) {
         }
     }
     return '';
+}
+
+// apiTokenFor returns githubToken when it is a github.com token, and ''
+// otherwise. On GitHub Enterprise Server (or GHE.com) the token belongs to
+// that instance and api.github.com would reject it. serverUrl is the
+// workflow's GITHUB_SERVER_URL.
+export function apiTokenFor(githubToken, serverUrl) {
+    if (!githubToken) {
+        return '';
+    }
+    let host;
+    try {
+        host = new URL(serverUrl || 'https://github.com').hostname;
+    } catch (error) {
+        return '';
+    }
+    return host === 'github.com' ? githubToken : '';
+}
+
+// httpRequest adapts an @actions/http-client HttpClient to the request
+// function latestV1Tag takes. getJson is not used because the error it
+// throws drops the response headers, which carry GitHub's rate-limit wait.
+export function httpRequest(client) {
+    return async (url, headers) => {
+        const response = await client.get(url, headers);
+        const body = await response.readBody();
+        return {
+            statusCode: response.message.statusCode,
+            headers: response.message.headers,
+            body,
+        };
+    };
+}
+
+// latestV1Tag looks up the newest stable v1 release on api.github.com (see
+// pickLatestV1 for why GitHub's own "latest" is not used).
+//
+//   request(url, headers): resolves to { statusCode, headers, body } (see
+//     httpRequest) and rejects on a network failure.
+//   token: from apiTokenFor. With a token the lookup gets the job's own rate
+//     limit; without one it shares the anonymous limit of the runner's IP
+//     address, which hosted and busy self-hosted runners can run out of.
+//   log, warn: for retries and a token GitHub rejects.
+//
+// Each request is retried on rate limits, server errors and network
+// failures, waiting as long as a rate-limited response asks (see
+// withRetry). A token GitHub rejects (401) is dropped and the lookup carries
+// on without it, so an expired token cannot stop the install.
+export async function latestV1Tag({
+    request,
+    token = '',
+    log = () => {},
+    warn = () => {},
+    delays,
+    sleep,
+    now,
+}) {
+    let headers = withToken(token);
+    for (let page = 1; page <= 5; page++) {
+        const url = `${CIMON_RELEASES_API}?per_page=100&page=${page}`;
+        const get = () =>
+            withRetry(() => getReleases(request, url, headers, now), {
+                what: 'Looking up the latest cimon release',
+                log,
+                delays,
+                sleep,
+            });
+        let releases;
+        try {
+            releases = await get();
+        } catch (error) {
+            if (httpStatus(error) !== 401 || !headers.Authorization) {
+                throw error;
+            }
+            warn(
+                'GitHub rejected the github-token input (HTTP 401); looking up ' +
+                    'the latest cimon release without it.'
+            );
+            headers = withToken('');
+            releases = await get();
+        }
+        if (!Array.isArray(releases) || releases.length === 0) {
+            break;
+        }
+        const tag = pickLatestV1(releases);
+        if (tag) {
+            return tag;
+        }
+    }
+    throw new Error(`No v1.x release found at ${CIMON_RELEASES_URL}`);
+}
+
+function withToken(token) {
+    const headers = {
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+    };
+    if (token) {
+        headers.Authorization = `Bearer ${token}`;
+    }
+    return headers;
+}
+
+// getReleases fetches one page of the releases API. A failure names the URL,
+// the HTTP status and GitHub's message, and carries statusCode, plus
+// retryAfterMs when the response is a rate limit (see rateLimitWait).
+async function getReleases(request, url, headers, now = Date.now) {
+    let response;
+    try {
+        response = await request(url, headers);
+    } catch (error) {
+        throw new Error(`${url}: ${error.message}`);
+    }
+    const { statusCode, body } = response;
+    if (statusCode === 404) {
+        return [];
+    }
+    if (statusCode === 200) {
+        try {
+            return JSON.parse(body);
+        } catch (error) {
+            throw new Error(`${url}: the response is not JSON (${error.message})`);
+        }
+    }
+    let message = '';
+    try {
+        message = JSON.parse(body).message || '';
+    } catch (error) {
+        // Not a JSON error body; the status says enough.
+    }
+    const error = new Error(
+        `HTTP ${statusCode} from ${url}${message ? `: ${message}` : ''}`
+    );
+    error.statusCode = statusCode;
+    const wait = rateLimitWait(statusCode, response.headers, message, now());
+    if (wait >= 0) {
+        error.retryAfterMs = wait;
+    }
+    throw error;
 }
