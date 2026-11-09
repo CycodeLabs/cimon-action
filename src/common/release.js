@@ -1,7 +1,7 @@
 // Release selection shared by the agent action (src/main) and the attest
 // action (attest/). Both bundle this file with ncc.
 
-import { httpStatus, withRetry } from './retry.js';
+import { httpStatus, rateLimitWait, withRetry } from './retry.js';
 
 // A cimon-releases tag: v1.0.28, or a pre-release such as
 // v1.0.30-rc-windows-1. The leading "v" is optional in the input. The
@@ -104,32 +104,49 @@ export function apiTokenFor(githubToken, serverUrl) {
     return host === 'github.com' ? githubToken : '';
 }
 
+// httpRequest adapts an @actions/http-client HttpClient to the request
+// function latestV1Tag takes. getJson is not used because the error it
+// throws drops the response headers, which carry GitHub's rate-limit wait.
+export function httpRequest(client) {
+    return async (url, headers) => {
+        const response = await client.get(url, headers);
+        const body = await response.readBody();
+        return {
+            statusCode: response.message.statusCode,
+            headers: response.message.headers,
+            body,
+        };
+    };
+}
+
 // latestV1Tag looks up the newest stable v1 release on api.github.com (see
 // pickLatestV1 for why GitHub's own "latest" is not used).
 //
-//   getJson(url, headers): @actions/http-client's getJson. It resolves to
-//     { result } and throws an error carrying statusCode on an HTTP error.
+//   request(url, headers): resolves to { statusCode, headers, body } (see
+//     httpRequest) and rejects on a network failure.
 //   token: from apiTokenFor. With a token the lookup gets the job's own rate
 //     limit; without one it shares the anonymous limit of the runner's IP
 //     address, which hosted and busy self-hosted runners can run out of.
 //   log, warn: for retries and a token GitHub rejects.
 //
 // Each request is retried on rate limits, server errors and network
-// failures (see withRetry). A token GitHub rejects (401) is dropped and the
-// lookup carries on without it, so an expired token cannot stop the install.
+// failures, waiting as long as a rate-limited response asks (see
+// withRetry). A token GitHub rejects (401) is dropped and the lookup carries
+// on without it, so an expired token cannot stop the install.
 export async function latestV1Tag({
-    getJson,
+    request,
     token = '',
     log = () => {},
     warn = () => {},
     delays,
     sleep,
+    now,
 }) {
     let headers = withToken(token);
     for (let page = 1; page <= 5; page++) {
         const url = `${CIMON_RELEASES_API}?per_page=100&page=${page}`;
         const get = () =>
-            withRetry(() => getReleases(getJson, url, headers), {
+            withRetry(() => getReleases(request, url, headers, now), {
                 what: 'Looking up the latest cimon release',
                 log,
                 delays,
@@ -161,27 +178,50 @@ export async function latestV1Tag({
 }
 
 function withToken(token) {
-    const headers = { 'X-GitHub-Api-Version': '2022-11-28' };
+    const headers = {
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+    };
     if (token) {
         headers.Authorization = `Bearer ${token}`;
     }
     return headers;
 }
 
-// getReleases fetches one page of the releases API. A failure names the URL
-// and the HTTP status, which GitHub's error body leaves out.
-async function getReleases(getJson, url, headers) {
+// getReleases fetches one page of the releases API. A failure names the URL,
+// the HTTP status and GitHub's message, and carries statusCode, plus
+// retryAfterMs when the response is a rate limit (see rateLimitWait).
+async function getReleases(request, url, headers, now = Date.now) {
+    let response;
     try {
-        const response = await getJson(url, headers);
-        return response.result;
+        response = await request(url, headers);
     } catch (error) {
-        const status = httpStatus(error);
-        const wrapped = new Error(
-            status
-                ? `HTTP ${status} from ${url}: ${error.message}`
-                : `${url}: ${error.message}`
-        );
-        wrapped.statusCode = status;
-        throw wrapped;
+        throw new Error(`${url}: ${error.message}`);
     }
+    const { statusCode, body } = response;
+    if (statusCode === 404) {
+        return [];
+    }
+    if (statusCode === 200) {
+        try {
+            return JSON.parse(body);
+        } catch (error) {
+            throw new Error(`${url}: the response is not JSON (${error.message})`);
+        }
+    }
+    let message = '';
+    try {
+        message = JSON.parse(body).message || '';
+    } catch (error) {
+        // Not a JSON error body; the status says enough.
+    }
+    const error = new Error(
+        `HTTP ${statusCode} from ${url}${message ? `: ${message}` : ''}`
+    );
+    error.statusCode = statusCode;
+    const wait = rateLimitWait(statusCode, response.headers, message, now());
+    if (wait >= 0) {
+        error.retryAfterMs = wait;
+    }
+    throw error;
 }

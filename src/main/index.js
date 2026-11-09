@@ -11,13 +11,14 @@ import {
 } from '../common/install.js';
 import {
     apiTokenFor,
+    httpRequest,
     CIMON_RELEASES_URL,
     ConfigError,
     isConfigError,
     latestV1Tag,
     resolveRelease,
 } from '../common/release.js';
-import { withRetry } from '../common/retry.js';
+import { rateLimitWait, withRetry } from '../common/retry.js';
 
 // latestVersion looks up the newest stable v1 release with the job's
 // github-token (see latestV1Tag), retrying rate limits and network failures.
@@ -33,7 +34,7 @@ async function latestVersion(githubToken) {
     }
     core.info('Looking up the latest cimon release...');
     return latestV1Tag({
-        getJson: (url, headers) => httpClient.getJson(url, headers),
+        request: httpRequest(httpClient),
         token,
         log: (message) => core.info(message),
         warn: (message) => core.warning(message),
@@ -175,8 +176,9 @@ const httpClient = new http.HttpClient('cimon-action', [], {
     socketTimeout: 60 * 1000,
 });
 
-// downloadBinaryToFile downloads url to filePath, retrying rate limits,
-// server errors and network failures. Any other HTTP error throws an error
+// downloadBinaryToFile downloads url to filePath, retrying rate limits (for
+// as long as GitHub asks), server errors and network failures. Any other
+// HTTP error throws an error
 // carrying httpStatusCode. The body is kept as bytes: readBody() returns a
 // string, which corrupts binary data through UTF-8 re-encoding.
 async function downloadBinaryToFile(url, filePath) {
@@ -193,6 +195,10 @@ async function downloadOnce(url, filePath) {
         message.resume();
         const error = new Error(`HTTP ${message.statusCode} from ${url}`);
         error.httpStatusCode = message.statusCode;
+        const wait = rateLimitWait(message.statusCode, message.headers);
+        if (wait >= 0) {
+            error.retryAfterMs = wait;
+        }
         throw error;
     }
     const chunks = [];

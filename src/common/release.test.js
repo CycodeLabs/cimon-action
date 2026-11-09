@@ -147,19 +147,23 @@ describe('latestV1Tag', () => {
         { tag_name: 'v1.0.30-rc-windows-2', draft: false },
         { tag_name: 'v1.0.29', draft: false },
     ];
-
-    function httpError(status) {
-        const error = new Error('API rate limit exceeded');
-        error.statusCode = status;
-        return error;
-    }
+    const ok = (releases) => ({
+        statusCode: 200,
+        headers: {},
+        body: JSON.stringify(releases),
+    });
+    const fail = (statusCode, headers = {}, message = 'API rate limit exceeded') => ({
+        statusCode,
+        headers,
+        body: JSON.stringify({ message }),
+    });
 
     it('sends the token and returns the newest stable v1 tag', async () => {
         const calls = [];
         const tag = await latestV1Tag({
-            getJson: async (url, headers) => {
+            request: async (url, headers) => {
                 calls.push({ url, headers });
-                return { result: page1 };
+                return ok(page1);
             },
             token: 'ghs_x',
             sleep: noSleep,
@@ -173,57 +177,112 @@ describe('latestV1Tag', () => {
     it('sends no Authorization header without a token', async () => {
         let sent;
         await latestV1Tag({
-            getJson: async (url, headers) => {
+            request: async (url, headers) => {
                 sent = headers;
-                return { result: page1 };
+                return ok(page1);
             },
             sleep: noSleep,
         });
         assert.equal(sent.Authorization, undefined);
     });
 
-    it('retries a rate limit and logs the status', async () => {
+    it('waits as long as retry-after asks before retrying', async () => {
         const logged = [];
+        const slept = [];
         let calls = 0;
         const tag = await latestV1Tag({
-            getJson: async () => {
+            request: async () => {
                 calls++;
-                if (calls === 1) {
-                    throw httpError(429);
-                }
-                return { result: page1 };
+                return calls === 1 ? fail(429, { 'retry-after': '30' }) : ok(page1);
             },
             log: (message) => logged.push(message),
+            sleep: async (ms) => slept.push(ms),
+        });
+        assert.equal(tag, 'v1.0.29');
+        assert.deepEqual(slept, [30000]);
+        assert.match(logged[0], /HTTP 429 from https:\/\/api\.github\.com.*API rate limit exceeded/);
+        assert.match(logged[0], /retrying in 30s/);
+    });
+
+    it('waits until the reset when the limit is used up', async () => {
+        const slept = [];
+        let calls = 0;
+        const now = 1_000_000_000_000;
+        await latestV1Tag({
+            request: async () => {
+                calls++;
+                return calls === 1
+                    ? fail(403, {
+                          'x-ratelimit-remaining': '0',
+                          'x-ratelimit-reset': String(now / 1000 + 20),
+                      })
+                    : ok(page1);
+            },
+            sleep: async (ms) => slept.push(ms),
+            now: () => now,
+        });
+        assert.deepEqual(slept, [21000]);
+    });
+
+    it('fails at once when the limit resets later than the action waits', async () => {
+        const now = 1_000_000_000_000;
+        let calls = 0;
+        await assert.rejects(
+            latestV1Tag({
+                request: async () => {
+                    calls++;
+                    return fail(403, {
+                        'x-ratelimit-remaining': '0',
+                        'x-ratelimit-reset': String(now / 1000 + 40 * 60),
+                    });
+                },
+                sleep: noSleep,
+                now: () => now,
+            }),
+            (error) =>
+                error.statusCode === 403 &&
+                /HTTP 403 from .*rate-limited: GitHub asks to wait 41 min/.test(error.message)
+        );
+        assert.equal(calls, 1);
+    });
+
+    it('does not retry a 403 that is not a rate limit', async () => {
+        let calls = 0;
+        await assert.rejects(
+            latestV1Tag({
+                request: async () => {
+                    calls++;
+                    return fail(403, {}, 'Resource not accessible by integration');
+                },
+                sleep: noSleep,
+            }),
+            /HTTP 403 from .*Resource not accessible/
+        );
+        assert.equal(calls, 1);
+    });
+
+    it('retries network failures and server errors', async () => {
+        const responses = [
+            () => {
+                throw new Error('socket hang up');
+            },
+            () => fail(502, {}, 'Bad Gateway'),
+            () => ok(page1),
+        ];
+        const tag = await latestV1Tag({
+            request: async () => responses.shift()(),
             sleep: noSleep,
         });
         assert.equal(tag, 'v1.0.29');
-        assert.equal(calls, 2);
-        assert.match(logged[0], /HTTP 429 from https:\/\/api\.github\.com/);
-    });
-
-    it('names the status when the attempts run out', async () => {
-        await assert.rejects(
-            latestV1Tag({
-                getJson: async () => {
-                    throw httpError(403);
-                },
-                delays: [1, 1],
-                sleep: noSleep,
-            }),
-            (error) => error.statusCode === 403 && /HTTP 403 from/.test(error.message)
-        );
     });
 
     it('drops a token GitHub rejects and carries on without it', async () => {
         const warned = [];
         const sent = [];
         const tag = await latestV1Tag({
-            getJson: async (url, headers) => {
+            request: async (url, headers) => {
                 sent.push(headers.Authorization);
-                if (headers.Authorization) {
-                    throw httpError(401);
-                }
-                return { result: page1 };
+                return headers.Authorization ? fail(401, {}, 'Bad credentials') : ok(page1);
             },
             token: 'expired',
             warn: (message) => warned.push(message),
@@ -237,9 +296,7 @@ describe('latestV1Tag', () => {
     it('fails on a 401 without a token', async () => {
         await assert.rejects(
             latestV1Tag({
-                getJson: async () => {
-                    throw httpError(401);
-                },
+                request: async () => fail(401, {}, 'Bad credentials'),
                 sleep: noSleep,
             }),
             /HTTP 401/
@@ -252,9 +309,7 @@ describe('latestV1Tag', () => {
             2: [{ tag_name: 'v1.0.29', draft: false }],
         };
         const tag = await latestV1Tag({
-            getJson: async (url) => ({
-                result: pages[new URL(url).searchParams.get('page')] || [],
-            }),
+            request: async (url) => ok(pages[new URL(url).searchParams.get('page')] || []),
             sleep: noSleep,
         });
         assert.equal(tag, 'v1.0.29');
@@ -263,7 +318,7 @@ describe('latestV1Tag', () => {
     it('fails when there is no v1 release', async () => {
         await assert.rejects(
             latestV1Tag({
-                getJson: async () => ({ result: [] }),
+                request: async () => ok([]),
                 sleep: noSleep,
             }),
             /No v1.x release found/

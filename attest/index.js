@@ -8,6 +8,7 @@ import fs from 'fs';
 import os from 'os';
 import {
     apiTokenFor,
+    httpRequest,
     isConfigError,
     latestV1Tag,
     resolveRelease,
@@ -54,7 +55,7 @@ async function latestTag(githubToken) {
     }
     core.info('Looking up the latest cimon release...');
     return latestV1Tag({
-        getJson: (url, headers) => httpClient.getJson(url, headers),
+        request: httpRequest(httpClient),
         token,
         log: (message) => core.info(message),
         warn: (message) => core.warning(message),
