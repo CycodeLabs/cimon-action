@@ -27692,20 +27692,26 @@ async function installRelease({
 /* harmony export */   "x1": () => (/* binding */ ConfigError),
 /* harmony export */   "yb": () => (/* binding */ isConfigError),
 /* harmony export */   "U": () => (/* binding */ resolveRelease),
-/* harmony export */   "UP": () => (/* binding */ pickLatestV1)
+/* harmony export */   "_m": () => (/* binding */ apiTokenFor),
+/* harmony export */   "ow": () => (/* binding */ latestV1Tag)
 /* harmony export */ });
-/* unused harmony export parseVersion */
+/* unused harmony exports CIMON_RELEASES_API, parseVersion, pickLatestV1 */
+/* harmony import */ var _retry_js__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(3045);
 // Release selection shared by the agent action (src/main) and the attest
 // action (attest/). Both bundle this file with ncc.
 
+
+
 // A cimon-releases tag: v1.0.28, or a pre-release such as
 // v1.0.30-rc-windows-1. The leading "v" is optional in the input. The
-// pattern also keeps the value safe to place in a download URL and to pass
-// as an install.sh argument.
+// pattern also keeps the value safe to place in a download URL.
 const TAG_PATTERN = /^v?\d+\.\d+\.\d+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$/;
 
 const CIMON_RELEASES_URL =
     'https://github.com/CycodeLabs/cimon-releases/releases';
+
+const CIMON_RELEASES_API =
+    'https://api.github.com/repos/CycodeLabs/cimon-releases/releases';
 
 // ConfigError marks a mistake in the release selection: a version that is
 // not a release tag, does not exist, or is set together with release-path.
@@ -27780,6 +27786,181 @@ function pickLatestV1(releases) {
     return '';
 }
 
+// apiTokenFor returns githubToken when it is a github.com token, and ''
+// otherwise. On GitHub Enterprise Server (or GHE.com) the token belongs to
+// that instance and api.github.com would reject it. serverUrl is the
+// workflow's GITHUB_SERVER_URL.
+function apiTokenFor(githubToken, serverUrl) {
+    if (!githubToken) {
+        return '';
+    }
+    let host;
+    try {
+        host = new URL(serverUrl || 'https://github.com').hostname;
+    } catch (error) {
+        return '';
+    }
+    return host === 'github.com' ? githubToken : '';
+}
+
+// latestV1Tag looks up the newest stable v1 release on api.github.com (see
+// pickLatestV1 for why GitHub's own "latest" is not used).
+//
+//   getJson(url, headers): @actions/http-client's getJson. It resolves to
+//     { result } and throws an error carrying statusCode on an HTTP error.
+//   token: from apiTokenFor. With a token the lookup gets the job's own rate
+//     limit; without one it shares the anonymous limit of the runner's IP
+//     address, which hosted and busy self-hosted runners can run out of.
+//   log, warn: for retries and a token GitHub rejects.
+//
+// Each request is retried on rate limits, server errors and network
+// failures (see withRetry). A token GitHub rejects (401) is dropped and the
+// lookup carries on without it, so an expired token cannot stop the install.
+async function latestV1Tag({
+    getJson,
+    token = '',
+    log = () => {},
+    warn = () => {},
+    delays,
+    sleep,
+}) {
+    let headers = withToken(token);
+    for (let page = 1; page <= 5; page++) {
+        const url = `${CIMON_RELEASES_API}?per_page=100&page=${page}`;
+        const get = () =>
+            (0,_retry_js__WEBPACK_IMPORTED_MODULE_0__/* .withRetry */ .JN)(() => getReleases(getJson, url, headers), {
+                what: 'Looking up the latest cimon release',
+                log,
+                delays,
+                sleep,
+            });
+        let releases;
+        try {
+            releases = await get();
+        } catch (error) {
+            if ((0,_retry_js__WEBPACK_IMPORTED_MODULE_0__/* .httpStatus */ .mQ)(error) !== 401 || !headers.Authorization) {
+                throw error;
+            }
+            warn(
+                'GitHub rejected the github-token input (HTTP 401); looking up ' +
+                    'the latest cimon release without it.'
+            );
+            headers = withToken('');
+            releases = await get();
+        }
+        if (!Array.isArray(releases) || releases.length === 0) {
+            break;
+        }
+        const tag = pickLatestV1(releases);
+        if (tag) {
+            return tag;
+        }
+    }
+    throw new Error(`No v1.x release found at ${CIMON_RELEASES_URL}`);
+}
+
+function withToken(token) {
+    const headers = { 'X-GitHub-Api-Version': '2022-11-28' };
+    if (token) {
+        headers.Authorization = `Bearer ${token}`;
+    }
+    return headers;
+}
+
+// getReleases fetches one page of the releases API. A failure names the URL
+// and the HTTP status, which GitHub's error body leaves out.
+async function getReleases(getJson, url, headers) {
+    try {
+        const response = await getJson(url, headers);
+        return response.result;
+    } catch (error) {
+        const status = (0,_retry_js__WEBPACK_IMPORTED_MODULE_0__/* .httpStatus */ .mQ)(error);
+        const wrapped = new Error(
+            status
+                ? `HTTP ${status} from ${url}: ${error.message}`
+                : `${url}: ${error.message}`
+        );
+        wrapped.statusCode = status;
+        throw wrapped;
+    }
+}
+
+
+/***/ }),
+
+/***/ 3045:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
+
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   "mQ": () => (/* binding */ httpStatus),
+/* harmony export */   "JN": () => (/* binding */ withRetry)
+/* harmony export */ });
+/* unused harmony exports RETRY_DELAYS_MS, isRetryable */
+// Retries for the release lookup and downloads, shared by the agent action
+// (src/main) and the attest action (attest/). Node built-ins only, like the
+// rest of src/common.
+
+// Waits before the second, third and fourth attempts.
+const RETRY_DELAYS_MS = [2000, 5000, 10000];
+
+// HTTP statuses worth another attempt: rate limits (GitHub answers 403 or
+// 429), a request timeout, and server errors. Anything else, a 404 included,
+// will not change on retry.
+const RETRYABLE_STATUS = new Set([403, 408, 429]);
+
+// httpStatus returns the HTTP status an error carries, or 0. Downloads set
+// httpStatusCode; @actions/http-client's getJson throws errors with
+// statusCode.
+function httpStatus(error) {
+    if (!error) {
+        return 0;
+    }
+    return error.httpStatusCode || error.statusCode || 0;
+}
+
+// isRetryable reports whether a failed request is worth another attempt.
+// An error with no HTTP status is a network failure or a timeout, which is
+// retried, unless it is a ConfigError (a mistake in the inputs).
+function isRetryable(error) {
+    if (error && error.name === 'ConfigError') {
+        return false;
+    }
+    const status = httpStatus(error);
+    if (status === 0) {
+        return true;
+    }
+    return RETRYABLE_STATUS.has(status) || status >= 500;
+}
+
+function sleepFor(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// withRetry runs fn, and runs it again after each delay while it fails with
+// a retryable error. It logs every failed attempt with its error, so the
+// HTTP status of a failure always reaches the job log, and throws the last
+// error once the attempts run out.
+async function withRetry(
+    fn,
+    { what, log = () => {}, delays = RETRY_DELAYS_MS, sleep = sleepFor } = {}
+) {
+    for (let attempt = 0; ; attempt++) {
+        try {
+            return await fn();
+        } catch (error) {
+            if (attempt >= delays.length || !isRetryable(error)) {
+                throw error;
+            }
+            const seconds = delays[attempt] / 1000;
+            log(
+                `${what} failed (${error.message}); retrying in ${seconds}s ` +
+                    `(attempt ${attempt + 2} of ${delays.length + 1})`
+            );
+            await sleep(delays[attempt]);
+        }
+    }
+}
+
 
 /***/ }),
 
@@ -27793,6 +27974,7 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony import */ var _actions_http_client__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(6255);
 /* harmony import */ var _common_install_js__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(2441);
 /* harmony import */ var _common_release_js__WEBPACK_IMPORTED_MODULE_5__ = __nccwpck_require__(9630);
+/* harmony import */ var _common_retry_js__WEBPACK_IMPORTED_MODULE_6__ = __nccwpck_require__(3045);
 
 
 
@@ -27800,28 +27982,26 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 
 
 
-const CIMON_SCRIPT_DOWNLOAD_URL =
-    'https://cimon-releases.s3.amazonaws.com/install.sh';
-const CIMON_SCRIPT_PATH = '/tmp/install.sh';
-const CIMON_EXECUTABLE_DIR = '/tmp/cimon';
-const CIMON_EXECUTABLE_PATH = '/tmp/cimon/cimon';
 
-async function getLatestV1Version() {
-    // Page through releases (newest first) for the newest stable v1.x tag.
-    // GitHub's own "latest" is not used: v0 releases are still published
-    // from the v0 line, and release candidates (vX.Y.Z-rc...) are skipped.
-    const baseUrl = 'https://api.github.com/repos/CycodeLabs/cimon-releases/releases';
-    for (let page = 1; page <= 5; page++) {
-        const response = await httpClient.getJson(
-            `${baseUrl}?per_page=100&page=${page}`
+// latestVersion looks up the newest stable v1 release with the job's
+// github-token (see latestV1Tag), retrying rate limits and network failures.
+async function latestVersion(githubToken) {
+    const token = (0,_common_release_js__WEBPACK_IMPORTED_MODULE_5__/* .apiTokenFor */ ._m)(githubToken, process.env.GITHUB_SERVER_URL);
+    if (!token) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(
+            'Looking up the latest cimon release without a github.com token, ' +
+                "so it shares the runner IP address's anonymous GitHub API " +
+                'limit (60 requests per hour) and can be rate-limited. Set the ' +
+                'version input to skip the lookup.'
         );
-        const releases = response.result;
-        if (!Array.isArray(releases) || releases.length === 0) break;
-
-        const tag = (0,_common_release_js__WEBPACK_IMPORTED_MODULE_5__/* .pickLatestV1 */ .UP)(releases);
-        if (tag) return tag;
     }
-    throw new Error('No v1.x release found on cimon-releases');
+    _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Looking up the latest cimon release...');
+    return (0,_common_release_js__WEBPACK_IMPORTED_MODULE_5__/* .latestV1Tag */ .ow)({
+        getJson: (url, headers) => httpClient.getJson(url, headers),
+        token,
+        log: (message) => _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(message),
+        warn: (message) => _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(message),
+    });
 }
 
 async function installCosign() {
@@ -27872,30 +28052,25 @@ async function downloadV1Binary(version, { pinned = false } = {}) {
                 `that ${version} is a published release at ${_common_release_js__WEBPACK_IMPORTED_MODULE_5__/* .CIMON_RELEASES_URL */ .GW}.`
         );
     }
-    await downloadToFile(`${baseUrl}/checksums.txt`, checksumPath);
+    await downloadBinaryToFile(`${baseUrl}/checksums.txt`, checksumPath);
 
     // Step 1: Verify cosign signature on checksums.txt.
-    // This proves the checksums were signed by Cycode's private key.
-    // Verify cosign signature on checksums.txt.
     // This proves the checksums were signed by Cycode's private key.
     // Even if an attacker compromises the GitHub release, they can't
     // forge a valid signature without the private key.
     // MANDATORY: if signature is missing or invalid, abort.
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Downloading cosign signature...');
-    const sigResponse = await httpClient.get(`${baseUrl}/checksums.txt.sig`);
-    if (sigResponse.message.statusCode !== 200) {
+    try {
+        await downloadBinaryToFile(`${baseUrl}/checksums.txt.sig`, checksumSigPath);
+    } catch (error) {
+        if (error.httpStatusCode !== 404) {
+            throw error;
+        }
         throw new Error(
-            `Cosign signature file not found for ${version} (HTTP ${sigResponse.message.statusCode}).\n` +
+            `Cosign signature file not found for ${version} (HTTP 404).\n` +
             `All v1.x releases must be signed. This may indicate a compromised or incomplete release.`
         );
     }
-    const sigChunks = [];
-    await new Promise((resolve, reject) => {
-        sigResponse.message.on('data', (chunk) => sigChunks.push(chunk));
-        sigResponse.message.on('end', resolve);
-        sigResponse.message.on('error', reject);
-    });
-    fs__WEBPACK_IMPORTED_MODULE_2__.writeFileSync(checksumSigPath, Buffer.concat(sigChunks));
 
     const cosignPath = await installCosign();
 
@@ -27946,7 +28121,11 @@ async function downloadV1Binary(version, { pinned = false } = {}) {
 
     _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Binary verified (cosign + SHA256): ${actualHash.substring(0, 16)}...`);
 
+    // Extract into an empty directory, so a binary an earlier job left
+    // there on a persistent self-hosted runner can never be the one that
+    // runs.
     const extractDir = '/tmp/cimon-v1';
+    fs__WEBPACK_IMPORTED_MODULE_2__.rmSync(extractDir, { recursive: true, force: true });
     fs__WEBPACK_IMPORTED_MODULE_2__.mkdirSync(extractDir, { recursive: true });
     await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('tar', ['-xzf', tarPath, '-C', extractDir]);
     fs__WEBPACK_IMPORTED_MODULE_2__.chmodSync(`${extractDir}/cimon`, 0o755);
@@ -27954,17 +28133,24 @@ async function downloadV1Binary(version, { pinned = false } = {}) {
     return `${extractDir}/cimon`;
 }
 
-const httpClient = new _actions_http_client__WEBPACK_IMPORTED_MODULE_3__.HttpClient('cimon-action');
+// A request that stops sending data for a minute fails (and is retried)
+// instead of holding the job for the client's default of three minutes.
+const httpClient = new _actions_http_client__WEBPACK_IMPORTED_MODULE_3__.HttpClient('cimon-action', [], {
+    socketTimeout: 60 * 1000,
+});
 
-async function downloadToFile(url, filePath) {
-    const response = await httpClient.get(url);
-    const responseBody = await response.readBody();
-    fs__WEBPACK_IMPORTED_MODULE_2__.writeFileSync(filePath, responseBody);
+// downloadBinaryToFile downloads url to filePath, retrying rate limits,
+// server errors and network failures. Any other HTTP error throws an error
+// carrying httpStatusCode. The body is kept as bytes: readBody() returns a
+// string, which corrupts binary data through UTF-8 re-encoding.
+async function downloadBinaryToFile(url, filePath) {
+    await (0,_common_retry_js__WEBPACK_IMPORTED_MODULE_6__/* .withRetry */ .JN)(() => downloadOnce(url, filePath), {
+        what: `Downloading ${url}`,
+        log: (message) => _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(message),
+    });
 }
 
-// Binary-safe download for tarballs and other non-text files.
-// readBody() returns a string which corrupts binary data via UTF-8 re-encoding.
-async function downloadBinaryToFile(url, filePath) {
+async function downloadOnce(url, filePath) {
     const response = await httpClient.get(url);
     const message = response.message;
     if (message.statusCode !== 200) {
@@ -28058,10 +28244,8 @@ async function run(config) {
 
         releasePath = release.releasePath;
     } else if (release.version !== '') {
-        // A pinned version always takes the verified download (cosign
-        // signature on checksums.txt, then SHA256 of the tarball), with or
-        // without hardening. It also skips install.sh, so nothing fetched at
-        // run time decides which binary runs.
+        // A pinned version skips the lookup, so nothing fetched at run time
+        // decides which binary runs.
         if (!release.version.startsWith('v1.')) {
             throw new _common_release_js__WEBPACK_IMPORTED_MODULE_5__/* .ConfigError */ .x1(
                 `version ${release.version} is not supported: this action ` +
@@ -28070,33 +28254,13 @@ async function run(config) {
         }
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Running Cimon ${release.version} (pinned by the version input)`);
         releasePath = await downloadV1Binary(release.version, { pinned: true });
-    } else if (config.cimon.hardening) {
-        // Hardening requires v1.x binary. Auto-download latest v1.x release.
-        const version = await getLatestV1Version();
-        releasePath = await downloadV1Binary(version);
     } else {
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info('Running Cimon from latest release path');
-
-        // Install fresh on every run. Reusing an existing /tmp/cimon would
-        // run whatever release an earlier job left there on a persistent
-        // self-hosted runner, not the latest one.
-        fs__WEBPACK_IMPORTED_MODULE_2__.rmSync(CIMON_EXECUTABLE_DIR, { recursive: true, force: true });
-        fs__WEBPACK_IMPORTED_MODULE_2__.rmSync(CIMON_SCRIPT_PATH, { force: true });
-        await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
-
-        let params = [CIMON_SCRIPT_PATH, '-b', CIMON_EXECUTABLE_DIR];
-        if (
-            config.cimon.logLevel == 'debug' ||
-            config.cimon.logLevel == 'trace'
-        ) {
-            params.push('-d');
-        }
-        let retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec('sh', params);
-        if (retval !== 0) {
-            throw new Error(`Failed installing Cimon: ${retval}`);
-        }
-
-        releasePath = CIMON_EXECUTABLE_PATH;
+        // Every other run takes the latest v1 release through the same
+        // verified download (cosign signature on checksums.txt, then the
+        // tarball's SHA256).
+        const version = await latestVersion(config.github.token);
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Running Cimon ${version} (the latest release)`);
+        releasePath = await downloadV1Binary(version);
     }
 
     // Save release path so the post step uses the same binary for stop.

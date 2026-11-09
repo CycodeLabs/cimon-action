@@ -7,15 +7,12 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import {
-    CIMON_RELEASES_URL,
-    ConfigError,
+    apiTokenFor,
     isConfigError,
-    pickLatestV1,
+    latestV1Tag,
     resolveRelease,
 } from '../src/common/release.js';
-import { installRelease, releaseAsset } from '../src/common/install.js';
-
-const IS_WINDOWS = process.platform === 'win32';
+import { installRelease } from '../src/common/install.js';
 
 // SECURITY: scope every install under a unique per-step subdirectory so a
 // malicious previous step / job on a self-hosted runner cannot plant a
@@ -37,103 +34,38 @@ const CIMON_RUN_KEY = [
     .join('-');
 const CIMON_TMP_DIR = path.join(CIMON_TMP_BASE, `cimon-${CIMON_RUN_KEY}`);
 
-// Linux: bootstrap from the cimon-releases install.sh.
-const CIMON_SCRIPT_DOWNLOAD_URL =
-    'https://cimon-releases.s3.amazonaws.com/install.sh';
-const CIMON_SCRIPT_PATH = path.join(CIMON_TMP_DIR, 'install.sh');
-const CIMON_EXECUTABLE_DIR = path.join(CIMON_TMP_DIR, 'cimon');
-const CIMON_EXECUTABLE_PATH = path.join(CIMON_EXECUTABLE_DIR, 'cimon');
+// A request that stops sending data for a minute fails (and is retried)
+// instead of holding the job for the client's default of three minutes.
+const httpClient = new http.HttpClient('cimon-action', [], {
+    socketTimeout: 60 * 1000,
+});
 
-// Windows and macOS: download the release asset from the cimon-releases
-// GitHub release and verify it before running it (see
-// src/common/install.js).
-const CIMON_RELEASES_API =
-    'https://api.github.com/repos/cycodelabs/cimon-releases/releases';
-
-const httpClient = new http.HttpClient('cimon-action');
-
-async function downloadToFile(url, filePath) {
-    const response = await httpClient.get(url);
-    const responseBody = await response.readBody();
-    fs.writeFileSync(filePath, responseBody);
-}
-
-// apiTokenFor returns the github-token input when it is a github.com token,
-// and '' otherwise. On GitHub Enterprise Server (or GHE.com) the token
-// belongs to that instance and api.github.com would reject it.
-function apiTokenFor(githubToken) {
-    if (!githubToken) {
-        return '';
-    }
-    let host = 'github.com';
-    try {
-        host = new URL(process.env.GITHUB_SERVER_URL || 'https://github.com')
-            .hostname;
-    } catch (error) {
-        return '';
-    }
-    return host === 'github.com' ? githubToken : '';
-}
-
-// latestTag looks up the newest stable v1 cimon release on api.github.com
-// (see pickLatestV1 for why GitHub's own "latest" is not used).
-//
-// Without a token the lookup uses the unauthenticated REST limit (60
-// req/IP/hour), which busy self-hosted fleets behind a shared egress IP can
-// exhaust, leading to 403/429s before any download runs. Pinning a version
-// skips the lookup entirely.
+// latestTag looks up the newest stable v1 release with the job's
+// github-token (see latestV1Tag), retrying rate limits and network failures.
 async function latestTag(githubToken) {
-    const token = apiTokenFor(githubToken);
-    const headers = {};
-    if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-        headers['X-GitHub-Api-Version'] = '2022-11-28';
-    } else {
+    const token = apiTokenFor(githubToken, process.env.GITHUB_SERVER_URL);
+    if (!token) {
         core.warning(
-            'Looking up the latest cimon release without a github.com token ' +
-                '(60 requests/hour per IP). On busy self-hosted runners this ' +
-                'can be rate-limited. Set the version input to skip the lookup.'
+            'Looking up the latest cimon release without a github.com token, ' +
+                "so it shares the runner IP address's anonymous GitHub API " +
+                'limit (60 requests per hour) and can be rate-limited. Set the ' +
+                'version input to skip the lookup.'
         );
     }
-
-    for (let page = 1; page <= 5; page++) {
-        const response = await httpClient.getJson(
-            `${CIMON_RELEASES_API}?per_page=100&page=${page}`,
-            headers
-        );
-        const releases = response.result;
-        if (!Array.isArray(releases) || releases.length === 0) {
-            break;
-        }
-        const tag = pickLatestV1(releases);
-        if (tag) {
-            return tag;
-        }
-    }
-    throw new Error('No v1.x release found on cimon-releases');
-}
-
-// assertPinnedRelease fails with a ConfigError when the pinned release has
-// no asset for this runner. install.sh reports a missing tag the same way as
-// a network failure, so the Linux path checks first; it reaches the same
-// github.com URL install.sh downloads from.
-async function assertPinnedRelease(tag) {
-    const asset = releaseAsset(process.platform, process.arch).name;
-    const url = `${CIMON_RELEASES_URL}/download/${tag}/${asset}`;
-    const response = await httpClient.head(url);
-    response.message.resume();
-    if (response.message.statusCode === 404) {
-        throw new ConfigError(
-            `cimon ${tag} has no ${asset}. Check that ${tag} is a published ` +
-                `release with that asset at ${CIMON_RELEASES_URL}.`
-        );
-    }
+    core.info('Looking up the latest cimon release...');
+    return latestV1Tag({
+        getJson: (url, headers) => httpClient.getJson(url, headers),
+        token,
+        log: (message) => core.info(message),
+        warn: (message) => core.warning(message),
+    });
 }
 
 // installVerified installs cimon release `version` (or the latest release
-// when it is '') and returns the path to the binary. The hardening agent does
-// not exist on Windows or macOS; those builds only expose `attest` and the
-// key-generation commands, which is all this action needs.
+// when it is '') and returns the path to the binary. Downloads go through
+// tool-cache, which retries rate limits and server errors. On Windows and
+// macOS the release is an attest-only build (no hardening agent), which is
+// all this action needs.
 async function installVerified(githubToken, version) {
     // SECURITY: wipe any stale state before install, even within the per-job
     // subdir computed at module load. This defends against a malicious step
@@ -285,51 +217,13 @@ async function run(config) {
         }
 
         releasePath = release.releasePath;
-    } else if (IS_WINDOWS || process.platform === 'darwin') {
-        // Windows and macOS: verified download of the release asset.
+    } else {
+        // Every platform takes the verified download of the release asset.
         core.info(`Running Cimon Attest from ${releaseName}`);
         releasePath = await installVerified(
             config.github.token,
             release.version
         );
-    } else {
-        // Linux keeps install.sh (cimon-releases.s3.amazonaws.com), which
-        // checks the tarball's SHA256 against checksums.txt, so the hosts it
-        // reaches stay the same for runners with egress allowlists.
-        core.info(`Running Cimon from ${releaseName}`);
-
-        // SECURITY: wipe any stale state under the per-job subdir before
-        // install, then always re-download the install script. Defends
-        // against a malicious earlier step in this job planting an
-        // install script or pre-built cimon binary at our expected paths.
-        if (fs.existsSync(CIMON_TMP_DIR)) {
-            fs.rmSync(CIMON_TMP_DIR, { recursive: true, force: true });
-        }
-        fs.mkdirSync(CIMON_TMP_DIR, { recursive: true });
-
-        await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
-
-        {
-            let params = [CIMON_SCRIPT_PATH, '-b', CIMON_EXECUTABLE_DIR];
-            if (
-                config.cimon.logLevel == 'debug' ||
-                config.cimon.logLevel == 'trace'
-            ) {
-                params.push('-d');
-            }
-            // install.sh takes the release tag as its last argument and
-            // installs the latest release without one.
-            if (release.version !== '') {
-                await assertPinnedRelease(release.version);
-                params.push(release.version);
-            }
-            let retval = await exec.exec('sh', params);
-            if (retval !== 0) {
-                throw new Error(`Failed installing Cimon: ${retval}`);
-            }
-        }
-
-        releasePath = CIMON_EXECUTABLE_PATH;
     }
 
     // Expose the installed binary location to downstream workflow steps so

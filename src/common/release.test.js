@@ -1,6 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { isConfigError, parseVersion, pickLatestV1, resolveRelease } from './release.js';
+import {
+    apiTokenFor,
+    CIMON_RELEASES_API,
+    isConfigError,
+    latestV1Tag,
+    parseVersion,
+    pickLatestV1,
+    resolveRelease,
+} from './release.js';
 
 describe('parseVersion', () => {
     it('treats empty and latest as the latest release', () => {
@@ -111,5 +119,154 @@ describe('ConfigError', () => {
         }
         assert.equal(isConfigError(new Error('network')), false);
         assert.equal(isConfigError(undefined), false);
+    });
+});
+
+describe('apiTokenFor', () => {
+    it('uses the token on github.com', () => {
+        assert.equal(apiTokenFor('ghs_x', 'https://github.com'), 'ghs_x');
+        assert.equal(apiTokenFor('ghs_x', undefined), 'ghs_x');
+        assert.equal(apiTokenFor('ghs_x', ''), 'ghs_x');
+    });
+
+    it('drops a token from another GitHub instance', () => {
+        assert.equal(apiTokenFor('ghs_x', 'https://ghes.example.com'), '');
+        assert.equal(apiTokenFor('ghs_x', 'https://acme.ghe.com'), '');
+        assert.equal(apiTokenFor('ghs_x', 'not a url'), '');
+    });
+
+    it('returns empty without a token', () => {
+        assert.equal(apiTokenFor('', 'https://github.com'), '');
+        assert.equal(apiTokenFor(undefined, 'https://github.com'), '');
+    });
+});
+
+describe('latestV1Tag', () => {
+    const noSleep = async () => {};
+    const page1 = [
+        { tag_name: 'v1.0.30-rc-windows-2', draft: false },
+        { tag_name: 'v1.0.29', draft: false },
+    ];
+
+    function httpError(status) {
+        const error = new Error('API rate limit exceeded');
+        error.statusCode = status;
+        return error;
+    }
+
+    it('sends the token and returns the newest stable v1 tag', async () => {
+        const calls = [];
+        const tag = await latestV1Tag({
+            getJson: async (url, headers) => {
+                calls.push({ url, headers });
+                return { result: page1 };
+            },
+            token: 'ghs_x',
+            sleep: noSleep,
+        });
+        assert.equal(tag, 'v1.0.29');
+        assert.equal(calls.length, 1);
+        assert.equal(calls[0].url, `${CIMON_RELEASES_API}?per_page=100&page=1`);
+        assert.equal(calls[0].headers.Authorization, 'Bearer ghs_x');
+    });
+
+    it('sends no Authorization header without a token', async () => {
+        let sent;
+        await latestV1Tag({
+            getJson: async (url, headers) => {
+                sent = headers;
+                return { result: page1 };
+            },
+            sleep: noSleep,
+        });
+        assert.equal(sent.Authorization, undefined);
+    });
+
+    it('retries a rate limit and logs the status', async () => {
+        const logged = [];
+        let calls = 0;
+        const tag = await latestV1Tag({
+            getJson: async () => {
+                calls++;
+                if (calls === 1) {
+                    throw httpError(429);
+                }
+                return { result: page1 };
+            },
+            log: (message) => logged.push(message),
+            sleep: noSleep,
+        });
+        assert.equal(tag, 'v1.0.29');
+        assert.equal(calls, 2);
+        assert.match(logged[0], /HTTP 429 from https:\/\/api\.github\.com/);
+    });
+
+    it('names the status when the attempts run out', async () => {
+        await assert.rejects(
+            latestV1Tag({
+                getJson: async () => {
+                    throw httpError(403);
+                },
+                delays: [1, 1],
+                sleep: noSleep,
+            }),
+            (error) => error.statusCode === 403 && /HTTP 403 from/.test(error.message)
+        );
+    });
+
+    it('drops a token GitHub rejects and carries on without it', async () => {
+        const warned = [];
+        const sent = [];
+        const tag = await latestV1Tag({
+            getJson: async (url, headers) => {
+                sent.push(headers.Authorization);
+                if (headers.Authorization) {
+                    throw httpError(401);
+                }
+                return { result: page1 };
+            },
+            token: 'expired',
+            warn: (message) => warned.push(message),
+            sleep: noSleep,
+        });
+        assert.equal(tag, 'v1.0.29');
+        assert.deepEqual(sent, ['Bearer expired', undefined]);
+        assert.equal(warned.length, 1);
+    });
+
+    it('fails on a 401 without a token', async () => {
+        await assert.rejects(
+            latestV1Tag({
+                getJson: async () => {
+                    throw httpError(401);
+                },
+                sleep: noSleep,
+            }),
+            /HTTP 401/
+        );
+    });
+
+    it('pages until it finds a stable v1 release', async () => {
+        const pages = {
+            1: [{ tag_name: 'v1.0.30-rc-windows-2', draft: false }],
+            2: [{ tag_name: 'v1.0.29', draft: false }],
+        };
+        const tag = await latestV1Tag({
+            getJson: async (url) => ({
+                result: pages[new URL(url).searchParams.get('page')] || [],
+            }),
+            sleep: noSleep,
+        });
+        assert.equal(tag, 'v1.0.29');
+    });
+
+    it('fails when there is no v1 release', async () => {
+        await assert.rejects(
+            latestV1Tag({
+                getJson: async () => ({ result: [] }),
+                sleep: noSleep,
+            }),
+            /No v1.x release found/
+        );
     });
 });
