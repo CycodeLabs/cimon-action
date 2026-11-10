@@ -115,7 +115,10 @@ inputs:
     required: false
     default: 'sbom.intoto.jsonl.sig'
   github-token:
-    description: GitHub token for enriching build information
+    description: |
+      GitHub token. The action uses it to look up the latest Cimon release
+      under the job's own GitHub API rate limit, and Cimon uses it to enrich
+      build information.
     required: false
     default: ${{ github.token }}
   report-job-summary:

@@ -13,40 +13,40 @@ import {
     sha256File,
 } from '../common/install.js';
 import {
+    apiTokenFor,
+    httpRequest,
     CIMON_RELEASES_URL,
     ConfigError,
     isConfigError,
-    pickLatestV1,
+    latestV1Tag,
     resolveRelease,
 } from '../common/release.js';
+import { rateLimitWait, withRetry } from '../common/retry.js';
 
 const IS_WINDOWS = process.platform === 'win32';
 
 // Where the Windows release is downloaded: the runner's temp directory.
 const DOWNLOAD_DIR = IS_WINDOWS ? (process.env.RUNNER_TEMP || os.tmpdir()) : '/tmp';
 
-const CIMON_SCRIPT_DOWNLOAD_URL =
-    'https://cimon-releases.s3.amazonaws.com/install.sh';
-const CIMON_SCRIPT_PATH = '/tmp/install.sh';
-const CIMON_EXECUTABLE_DIR = '/tmp/cimon';
-const CIMON_EXECUTABLE_PATH = '/tmp/cimon/cimon';
-
-async function getLatestV1Version() {
-    // Page through releases (newest first) for the newest stable v1.x tag.
-    // GitHub's own "latest" is not used: v0 releases are still published
-    // from the v0 line, and release candidates (vX.Y.Z-rc...) are skipped.
-    const baseUrl = 'https://api.github.com/repos/CycodeLabs/cimon-releases/releases';
-    for (let page = 1; page <= 5; page++) {
-        const response = await httpClient.getJson(
-            `${baseUrl}?per_page=100&page=${page}`
+// latestVersion looks up the newest stable v1 release with the job's
+// github-token (see latestV1Tag), retrying rate limits and network failures.
+async function latestVersion(githubToken) {
+    const token = apiTokenFor(githubToken, process.env.GITHUB_SERVER_URL);
+    if (!token) {
+        core.warning(
+            'Looking up the latest cimon release without a github.com token, ' +
+                "so it shares the runner IP address's anonymous GitHub API " +
+                'limit (60 requests per hour) and can be rate-limited. Set the ' +
+                'version input to skip the lookup.'
         );
-        const releases = response.result;
-        if (!Array.isArray(releases) || releases.length === 0) break;
-
-        const tag = pickLatestV1(releases);
-        if (tag) return tag;
     }
-    throw new Error('No v1.x release found on cimon-releases');
+    core.info('Looking up the latest cimon release...');
+    return latestV1Tag({
+        request: httpRequest(httpClient),
+        token,
+        log: (message) => core.info(message),
+        warn: (message) => core.warning(message),
+    });
 }
 
 async function installCosign() {
@@ -97,30 +97,25 @@ async function downloadV1Binary(version, { pinned = false } = {}) {
                 `that ${version} is a published release at ${CIMON_RELEASES_URL}.`
         );
     }
-    await downloadToFile(`${baseUrl}/checksums.txt`, checksumPath);
+    await downloadBinaryToFile(`${baseUrl}/checksums.txt`, checksumPath);
 
     // Step 1: Verify cosign signature on checksums.txt.
-    // This proves the checksums were signed by Cycode's private key.
-    // Verify cosign signature on checksums.txt.
     // This proves the checksums were signed by Cycode's private key.
     // Even if an attacker compromises the GitHub release, they can't
     // forge a valid signature without the private key.
     // MANDATORY: if signature is missing or invalid, abort.
     core.info('Downloading cosign signature...');
-    const sigResponse = await httpClient.get(`${baseUrl}/checksums.txt.sig`);
-    if (sigResponse.message.statusCode !== 200) {
+    try {
+        await downloadBinaryToFile(`${baseUrl}/checksums.txt.sig`, checksumSigPath);
+    } catch (error) {
+        if (error.httpStatusCode !== 404) {
+            throw error;
+        }
         throw new Error(
-            `Cosign signature file not found for ${version} (HTTP ${sigResponse.message.statusCode}).\n` +
+            `Cosign signature file not found for ${version} (HTTP 404).\n` +
             `All v1.x releases must be signed. This may indicate a compromised or incomplete release.`
         );
     }
-    const sigChunks = [];
-    await new Promise((resolve, reject) => {
-        sigResponse.message.on('data', (chunk) => sigChunks.push(chunk));
-        sigResponse.message.on('end', resolve);
-        sigResponse.message.on('error', reject);
-    });
-    fs.writeFileSync(checksumSigPath, Buffer.concat(sigChunks));
 
     const cosignPath = await installCosign();
 
@@ -171,7 +166,11 @@ async function downloadV1Binary(version, { pinned = false } = {}) {
 
     core.info(`Binary verified (cosign + SHA256): ${actualHash.substring(0, 16)}...`);
 
+    // Extract into an empty directory, so a binary an earlier job left
+    // there on a persistent self-hosted runner can never be the one that
+    // runs.
     const extractDir = '/tmp/cimon-v1';
+    fs.rmSync(extractDir, { recursive: true, force: true });
     fs.mkdirSync(extractDir, { recursive: true });
     await exec.exec('tar', ['-xzf', tarPath, '-C', extractDir]);
     fs.chmodSync(`${extractDir}/cimon`, 0o755);
@@ -234,23 +233,35 @@ async function verifyWindowsAgent(releasePath) {
     }
 }
 
-const httpClient = new http.HttpClient('cimon-action');
+// A request that stops sending data for a minute fails (and is retried)
+// instead of holding the job for the client's default of three minutes.
+const httpClient = new http.HttpClient('cimon-action', [], {
+    socketTimeout: 60 * 1000,
+});
 
-async function downloadToFile(url, filePath) {
-    const response = await httpClient.get(url);
-    const responseBody = await response.readBody();
-    fs.writeFileSync(filePath, responseBody);
+// downloadBinaryToFile downloads url to filePath, retrying rate limits (for
+// as long as GitHub asks), server errors and network failures. Any other
+// HTTP error throws an error
+// carrying httpStatusCode. The body is kept as bytes: readBody() returns a
+// string, which corrupts binary data through UTF-8 re-encoding.
+async function downloadBinaryToFile(url, filePath) {
+    await withRetry(() => downloadOnce(url, filePath), {
+        what: `Downloading ${url}`,
+        log: (message) => core.info(message),
+    });
 }
 
-// Binary-safe download for tarballs and other non-text files.
-// readBody() returns a string which corrupts binary data via UTF-8 re-encoding.
-async function downloadBinaryToFile(url, filePath) {
+async function downloadOnce(url, filePath) {
     const response = await httpClient.get(url);
     const message = response.message;
     if (message.statusCode !== 200) {
         message.resume();
         const error = new Error(`HTTP ${message.statusCode} from ${url}`);
         error.httpStatusCode = message.statusCode;
+        const wait = rateLimitWait(message.statusCode, message.headers);
+        if (wait >= 0) {
+            error.retryAfterMs = wait;
+        }
         throw error;
     }
     const chunks = [];
@@ -348,7 +359,8 @@ async function run(config) {
     } else if (IS_WINDOWS) {
         // The version input names a release, such as a release candidate,
         // which the latest-v1 lookup never picks.
-        const version = release.version || (await getLatestV1Version());
+        const version =
+            release.version || (await latestVersion(config.github.token));
         core.info(
             release.version !== ''
                 ? `Running Cimon ${version} (pinned by the version input)`
@@ -358,39 +370,17 @@ async function run(config) {
             pinned: release.version !== '',
         });
     } else if (release.version !== '') {
-        // A pinned version always takes the verified download (cosign
-        // signature on checksums.txt, then SHA256 of the tarball), with or
-        // without hardening. It also skips install.sh, so nothing fetched at
-        // run time decides which binary runs.
+        // A pinned version skips the lookup, so nothing fetched at run time
+        // decides which binary runs.
         core.info(`Running Cimon ${release.version} (pinned by the version input)`);
         releasePath = await downloadV1Binary(release.version, { pinned: true });
-    } else if (config.cimon.hardening) {
-        // Hardening requires v1.x binary. Auto-download latest v1.x release.
-        const version = await getLatestV1Version();
-        releasePath = await downloadV1Binary(version);
     } else {
-        core.info('Running Cimon from latest release path');
-
-        // Install fresh on every run. Reusing an existing /tmp/cimon would
-        // run whatever release an earlier job left there on a persistent
-        // self-hosted runner, not the latest one.
-        fs.rmSync(CIMON_EXECUTABLE_DIR, { recursive: true, force: true });
-        fs.rmSync(CIMON_SCRIPT_PATH, { force: true });
-        await downloadToFile(CIMON_SCRIPT_DOWNLOAD_URL, CIMON_SCRIPT_PATH);
-
-        let params = [CIMON_SCRIPT_PATH, '-b', CIMON_EXECUTABLE_DIR];
-        if (
-            config.cimon.logLevel == 'debug' ||
-            config.cimon.logLevel == 'trace'
-        ) {
-            params.push('-d');
-        }
-        let retval = await exec.exec('sh', params);
-        if (retval !== 0) {
-            throw new Error(`Failed installing Cimon: ${retval}`);
-        }
-
-        releasePath = CIMON_EXECUTABLE_PATH;
+        // Every other run takes the latest v1 release through the same
+        // verified download (cosign signature on checksums.txt, then the
+        // tarball's SHA256).
+        const version = await latestVersion(config.github.token);
+        core.info(`Running Cimon ${version} (the latest release)`);
+        releasePath = await downloadV1Binary(version);
     }
 
     if (IS_WINDOWS) {

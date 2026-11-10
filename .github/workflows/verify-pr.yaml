@@ -267,9 +267,9 @@ jobs:
       # If it ran this one, starting the agent would fail the next step.
       - name: Leave a stale binary at the install path
         run: |
-          mkdir -p /tmp/cimon
-          printf '#!/bin/sh\necho "stale binary was reused" >&2\nexit 1\n' > /tmp/cimon/cimon
-          chmod +x /tmp/cimon/cimon
+          mkdir -p /tmp/cimon-v1
+          printf '#!/bin/sh\necho "stale binary was reused" >&2\nexit 1\n' > /tmp/cimon-v1/cimon
+          chmod +x /tmp/cimon-v1/cimon
 
       - name: Run Cimon
         uses: ./

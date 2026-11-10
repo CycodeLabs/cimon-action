@@ -36,7 +36,7 @@ async function run(config) {
 
     // The main step refuses to start the agent on other runners (see
     // src/main/index.js), so there is nothing to stop here. Skip instead
-    // of trying to download the Linux install script.
+    // of downloading anything.
     if (process.platform !== 'linux' && !isWindows) {
         core.info(
             `Cimon agent runs on Linux and Windows; nothing to stop on ${process.platform}`
