@@ -1,10 +1,12 @@
 import core from '@actions/core';
 import exec from '@actions/exec';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { DefaultArtifactClient } from '@actions/artifact';
 import {
     parseSBOMEntries,
+    parseSBOMDiagnosis,
     isSBOMEnabled,
     writeSBOMSummary,
 } from './sbom-summary.js';
@@ -30,12 +32,14 @@ async function sudoExists() {
 }
 
 async function run(config) {
-    // The main step refuses to start the agent on non-Linux runners (see
+    const isWindows = process.platform === 'win32';
+
+    // The main step refuses to start the agent on other runners (see
     // src/main/index.js), so there is nothing to stop here. Skip instead
     // of downloading anything.
-    if (process.platform !== 'linux') {
+    if (process.platform !== 'linux' && !isWindows) {
         core.info(
-            `Cimon agent is Linux-only; nothing to stop on ${process.platform}`
+            `Cimon agent runs on Linux and Windows; nothing to stop on ${process.platform}`
         );
         return;
     }
@@ -73,7 +77,7 @@ async function run(config) {
     };
 
     var retval;
-    const sudo = await sudoExists();
+    const sudo = !isWindows && (await sudoExists());
 
     if (sudo) {
         retval = await exec.exec(
@@ -87,16 +91,35 @@ async function run(config) {
 
     // Parse SBOM entries from the stop output (always, for upload and summary).
     const sbomEntries = parseSBOMEntries(stopOutput);
-    const sbomEnabled = isSBOMEnabled(stopOutput);
+    // The Windows agent explains a job without SBOMs, and linker runs it
+    // could not follow, in its diagnosis.
+    const diagnosis = parseSBOMDiagnosis(stopOutput);
+    const sbomEnabled =
+        isSBOMEnabled(stopOutput) ||
+        (diagnosis !== null && !diagnosis.hint.startsWith('SBOM generation is off'));
+    if (diagnosis && diagnosis.hint) {
+        core.warning(`Cimon SBOM: ${diagnosis.hint}`);
+    }
 
     // Display SBOM summary in job summary.
     const reportJobSummary = core.getBooleanInput('report-job-summary');
     if (reportJobSummary) {
-        await writeSBOMSummary(core, sbomEntries, { sbomEnabled });
+        await writeSBOMSummary(core, sbomEntries, { sbomEnabled, diagnosis });
     }
 
     // Upload SBOM files as artifacts (best-effort, never fails the workflow).
-    await uploadSBOMArtifacts(sbomEntries);
+    await uploadSBOMArtifacts(sbomEntries, core.getInput('sbom-artifact-name') || 'cimon-sbom');
+
+    // Keep the agent's output as an artifact when the Windows agent explains
+    // a problem, or at debug level, so that one file carries what a report
+    // of the problem needs.
+    if (
+        (diagnosis && diagnosis.hint) ||
+        config.cimon.logLevel == 'debug' ||
+        config.cimon.logLevel == 'trace'
+    ) {
+        await uploadAgentLog(stopOutput);
+    }
 
     if (retval !== 0) {
         throw new Error(`Failed stopping Cimon process: ${retval}`);
@@ -111,7 +134,7 @@ async function run(config) {
  *
  * Best-effort: errors are logged as warnings, never fail the workflow.
  */
-async function uploadSBOMArtifacts(sbomEntries) {
+async function uploadSBOMArtifacts(sbomEntries, artifactName) {
     if (!sbomEntries || sbomEntries.length === 0) return;
 
     // Collect all existing SBOM files from parsed entries.
@@ -124,6 +147,10 @@ async function uploadSBOMArtifacts(sbomEntries) {
         for (const filePath of [entry.cyclonedx, entry.spdx]) {
             if (filePath && fs.existsSync(filePath)) {
                 filesToUpload.push(filePath);
+                // The agent's signature beside it (CIMON_SBOM_SIGN_ENABLED).
+                if (fs.existsSync(filePath + '.sig')) {
+                    filesToUpload.push(filePath + '.sig');
+                }
             }
         }
     }
@@ -161,7 +188,7 @@ async function uploadSBOMArtifacts(sbomEntries) {
     try {
         const artifact = new DefaultArtifactClient();
         const { id, size } = await artifact.uploadArtifact(
-            'cimon-sbom',
+            artifactName,
             filesToUpload,
             rootDir,
             { retentionDays: 90 }
@@ -170,6 +197,26 @@ async function uploadSBOMArtifacts(sbomEntries) {
     } catch (err) {
         // Best-effort — never fail the workflow because of upload issues.
         core.warning(`SBOM: artifact upload failed (non-fatal): ${err.message}`);
+    }
+}
+
+/**
+ * Uploads the output of `cimon agent stop`, which carries the agent's log,
+ * as the cimon-agent-log-<job> artifact. Best-effort.
+ */
+async function uploadAgentLog(stopOutput) {
+    if (!stopOutput) return;
+    try {
+        const dir = fs.mkdtempSync(path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'cimon-agent-log-'));
+        const file = path.join(dir, 'cimon-agent.log');
+        fs.writeFileSync(file, stopOutput);
+        const artifact = new DefaultArtifactClient();
+        // One per job: a workflow run's artifacts need distinct names.
+        const name = process.env.GITHUB_JOB ? `cimon-agent-log-${process.env.GITHUB_JOB}` : 'cimon-agent-log';
+        const { id } = await artifact.uploadArtifact(name, [file], dir, { retentionDays: 30 });
+        core.info(`Cimon: uploaded the agent's log as the ${name} artifact (id=${id})`);
+    } catch (err) {
+        core.warning(`Cimon: uploading the agent's log failed (non-fatal): ${err.message}`);
     }
 }
 

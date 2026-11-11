@@ -23,16 +23,37 @@ Learn more about Cimon in our [docs](https://docs.cimon.build).
 | Runner OS | `cycodelabs/cimon-action` (agent) | `cycodelabs/cimon-action/attest` |
 | --------- | --------------------------------- | -------------------------------- |
 | Linux     | ✅                                | ✅                               |
-| Windows   | ❌                                | ✅                               |
+| Windows   | ✅ C/C++ SBOM generation only     | ✅                               |
 | macOS     | ❌                                | ✅                               |
 
-The agent deployed by this action (runtime monitoring, hardening, process and
-file reports, automatic SBOM generation and the `CIMON_SBOM_*` settings) is
-built on eBPF and runs **only on Linux runners**. On any other OS the action
-stops before installing anything and logs an explanatory error (the step
-fails with `fail-on-error: true`).
+On Linux the agent deployed by this action provides runtime monitoring,
+hardening, process and file reports, and automatic SBOM generation.
 
-The Windows and macOS releases of `cimon` are attest-only builds. Use the
+On Windows runners the agent generates C/C++ SBOMs for MSVC and clang-cl
+builds (CMake with Ninja, Visual Studio or NMake generators and with presets,
+MSBuild and Visual Studio (`devenv /build`) solutions, nmake, GNU make, Meson,
+and `cl`/`link` run directly), enabled with `CIMON_SBOM_ENABLED: true` and the
+`client-id` and `secret` inputs, as on Linux. The SBOMs appear in the job summary and the `cimon-sbom` artifact.
+GitHub-hosted Windows runners need no setup. On a self-hosted runner whose
+account is not an administrator, such as a runner service running as
+`NetworkService`, an administrator first grants that account access to the
+Windows kernel's event providers, once per machine: see
+[Windows Runners](https://docs.cimon.build/agent/overview/self-hosted#windows-runners).
+The `prevent`, `hardening`,
+`file-integrity` and `memory-protection` inputs are Linux-only and fail the
+step on Windows. The action sets `MSBUILDDISABLENODEREUSE=1` for the rest of
+the job, so that every MSBuild link belongs to the build that started it.
+
+When a Windows job gets no SBOM, or the agent sees links outside the builds it
+follows, the job summary says why: the builds the agent followed and what each
+came to (for example, a build that was up to date links nothing), and the
+linker runs it could not place, with what started them. The agent's log is
+then kept as the `cimon-agent-log-<job>` artifact, as it is for every job
+with `log-level: debug`. That artifact is what a report of the problem needs.
+
+On macOS the action stops before installing anything and logs an explanatory
+error (the step fails with `fail-on-error: true`). The macOS release of
+`cimon` is an attest-only build: use the
 [attest sub-action](./attest/README.md) there to generate and sign SLSA
 provenance, and to sign an SBOM produced by another tool with
 `cimon attest sbom`.
@@ -62,6 +83,7 @@ The action supports the following parameters:
 | `ignored-ip-nets`        |                       | A comma or white space separated list of ignored IP networks in CIDR notation, e.g. 10.0.0.0/8, 172.16.0.0/12. This setting is mandatory if your workflow runs containers attached to a custom network with configured sub-range. In other words, inter-container networking is usually ignored by Cimon. Cimon implicitly ignores 10.0.0.0/8 and 172.16.0.0/12 networks. |
 | `github-token`           | `${{ github.token }}` | GitHub token, used to look up the latest Cimon release under the job's own GitHub API rate limit and to enrich build information                                                                                                                                                                                                                                                                                                                      |
 | `report-job-summary`     | `true`                | Report results through job summary output                                                                                                                                                                                                                                                                                                                                 |
+| `sbom-artifact-name`     | `cimon-sbom`          | Name of the artifact the generated SBOMs and their signatures are uploaded as; give each job its own when several jobs of a run generate SBOMs                                                                                                                                                                                                                            |
 | `report-process-tree`    | `false`               | Enable to report the process tree                                                                                                                                                                                                                                                                                                                                         |
 | `slack-webhook-endpoint` |                       | Slack webhook endpoint to report security events                                                                                                                                                                                                                                                                                                                          |
 | `apply-fs-events`        | `false`               | Enable processing filesystem events and display them in the process tree report                                                                                                                                                                                                                                                                                           |

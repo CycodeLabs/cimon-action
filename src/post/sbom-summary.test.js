@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     parseSBOMEntries,
+    parseSBOMDiagnosis,
     isSBOMEnabled,
     filterMeaningfulEntries,
     writeSBOMSummary,
@@ -641,5 +642,97 @@ describe('backward compatibility', () => {
         assert.equal(entries[0].components, 0);
         assert.equal(entries[0].relationships, 0);
         assert.equal(entries[0].artifacts, 0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// parseSBOMDiagnosis and the summary's diagnosis section
+// ---------------------------------------------------------------------------
+describe('parseSBOMDiagnosis', () => {
+    const lines = [
+        JSON.stringify({
+            level: 'info',
+            buildSystem: 'cmake',
+            dir: 'D:\\a\\build',
+            linkerRuns: 0,
+            links: 0,
+            outcome: 'linked nothing',
+            detail: 'no linker ran: the build was up to date, or only configured',
+            message: 'SBOM diagnosis: build',
+        }),
+        JSON.stringify({
+            level: 'warn',
+            total: 1,
+            outsideCI: 1,
+            examples: ['link in C:\\x (outside the CI job: no CI variables in its environment); started by WmiPrvSE'],
+            message: 'SBOM diagnosis: linker runs',
+        }),
+        JSON.stringify({
+            level: 'warn',
+            sbomsWritten: 0,
+            hint: 'no build got an SBOM: cmake build in D:\\a\\build: linked nothing',
+            message: 'SBOM diagnosis',
+        }),
+    ];
+
+    it('returns null without a diagnosis', () => {
+        assert.equal(parseSBOMDiagnosis('{"level":"info","message":"Cimon terminated successfully"}'), null);
+    });
+
+    it('reads the hint, the builds and the linker examples', () => {
+        const d = parseSBOMDiagnosis(lines.join('\r\n'));
+        assert.equal(d.hint, 'no build got an SBOM: cmake build in D:\\a\\build: linked nothing');
+        assert.equal(d.builds.length, 1);
+        assert.equal(d.builds[0].outcome, 'linked nothing');
+        assert.equal(d.linkerExamples.length, 1);
+    });
+
+    it('reads an empty hint when everything worked', () => {
+        const d = parseSBOMDiagnosis(JSON.stringify({ level: 'info', sbomsWritten: 1, hint: '', message: 'SBOM diagnosis' }));
+        assert.deepStrictEqual(d, { hint: '', builds: [], linkerExamples: [] });
+    });
+
+    function mockCore() {
+        const raws = [];
+        const builder = {
+            addHeading: () => builder,
+            addRaw: (text) => {
+                raws.push(text);
+                return builder;
+            },
+            addTable: () => builder,
+            write: async () => {},
+        };
+        return { summary: builder, raws };
+    }
+
+    it('explains a job without SBOMs in the summary', async () => {
+        const core = mockCore();
+        const diagnosis = parseSBOMDiagnosis(lines.join('\n'));
+        await writeSBOMSummary(core, [], { sbomEnabled: true, diagnosis });
+        const text = core.raws.join('');
+        assert.ok(text.includes('<strong>Why:</strong> no build got an SBOM'));
+        assert.ok(text.includes('linked nothing (no linker ran'));
+        assert.ok(text.includes('outside the CI job'));
+        assert.ok(!text.includes('This can happen when'));
+    });
+
+    it('adds no diagnosis to a summary whose hint is empty', async () => {
+        const core = mockCore();
+        await writeSBOMSummary(
+            core,
+            [{ cyclonedx: 'a.cdx.json', spdx: 'a.spdx.json', components: 5, relationships: 4, artifacts: 1, hasStats: true }],
+            { sbomEnabled: true, diagnosis: { hint: '', builds: [], linkerExamples: [] } }
+        );
+        assert.ok(!core.raws.join('').includes('Why:'));
+    });
+
+    it('escapes HTML in paths and commands', async () => {
+        const core = mockCore();
+        await writeSBOMSummary(core, [], {
+            sbomEnabled: true,
+            diagnosis: { hint: 'a <b> & c', builds: [], linkerExamples: [] },
+        });
+        assert.ok(core.raws.join('').includes('a &lt;b&gt; &amp; c'));
     });
 });

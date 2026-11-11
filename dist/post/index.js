@@ -127729,10 +127729,12 @@ __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(42186);
 /* harmony import */ var _actions_exec__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(71514);
 /* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(57147);
-/* harmony import */ var path__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(71017);
-/* harmony import */ var _actions_artifact__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(79450);
-/* harmony import */ var _sbom_summary_js__WEBPACK_IMPORTED_MODULE_6__ = __nccwpck_require__(29021);
-/* harmony import */ var _stop_binary_js__WEBPACK_IMPORTED_MODULE_5__ = __nccwpck_require__(91661);
+/* harmony import */ var os__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(22037);
+/* harmony import */ var path__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(71017);
+/* harmony import */ var _actions_artifact__WEBPACK_IMPORTED_MODULE_5__ = __nccwpck_require__(79450);
+/* harmony import */ var _sbom_summary_js__WEBPACK_IMPORTED_MODULE_7__ = __nccwpck_require__(29021);
+/* harmony import */ var _stop_binary_js__WEBPACK_IMPORTED_MODULE_6__ = __nccwpck_require__(91661);
+
 
 
 
@@ -127761,12 +127763,14 @@ async function sudoExists() {
 }
 
 async function run(config) {
-    // The main step refuses to start the agent on non-Linux runners (see
+    const isWindows = process.platform === 'win32';
+
+    // The main step refuses to start the agent on other runners (see
     // src/main/index.js), so there is nothing to stop here. Skip instead
     // of downloading anything.
-    if (process.platform !== 'linux') {
+    if (process.platform !== 'linux' && !isWindows) {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(
-            `Cimon agent is Linux-only; nothing to stop on ${process.platform}`
+            `Cimon agent runs on Linux and Windows; nothing to stop on ${process.platform}`
         );
         return;
     }
@@ -127774,7 +127778,7 @@ async function run(config) {
     // Stop with the same binary the main step started, and never install
     // another release here: see stop-binary.js.
     const savedPath = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getState('release-path');
-    const binary = (0,_stop_binary_js__WEBPACK_IMPORTED_MODULE_5__/* .stopBinary */ .X)(savedPath, fs__WEBPACK_IMPORTED_MODULE_2__.existsSync);
+    const binary = (0,_stop_binary_js__WEBPACK_IMPORTED_MODULE_6__/* .stopBinary */ .X)(savedPath, fs__WEBPACK_IMPORTED_MODULE_2__.existsSync);
     if (binary.skip) {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(binary.skip);
         return;
@@ -127804,7 +127808,7 @@ async function run(config) {
     };
 
     var retval;
-    const sudo = await sudoExists();
+    const sudo = !isWindows && (await sudoExists());
 
     if (sudo) {
         retval = await _actions_exec__WEBPACK_IMPORTED_MODULE_1__.exec(
@@ -127817,17 +127821,36 @@ async function run(config) {
     }
 
     // Parse SBOM entries from the stop output (always, for upload and summary).
-    const sbomEntries = (0,_sbom_summary_js__WEBPACK_IMPORTED_MODULE_6__/* .parseSBOMEntries */ .ws)(stopOutput);
-    const sbomEnabled = (0,_sbom_summary_js__WEBPACK_IMPORTED_MODULE_6__/* .isSBOMEnabled */ .iE)(stopOutput);
+    const sbomEntries = (0,_sbom_summary_js__WEBPACK_IMPORTED_MODULE_7__/* .parseSBOMEntries */ .ws)(stopOutput);
+    // The Windows agent explains a job without SBOMs, and linker runs it
+    // could not follow, in its diagnosis.
+    const diagnosis = (0,_sbom_summary_js__WEBPACK_IMPORTED_MODULE_7__/* .parseSBOMDiagnosis */ .Ny)(stopOutput);
+    const sbomEnabled =
+        (0,_sbom_summary_js__WEBPACK_IMPORTED_MODULE_7__/* .isSBOMEnabled */ .iE)(stopOutput) ||
+        (diagnosis !== null && !diagnosis.hint.startsWith('SBOM generation is off'));
+    if (diagnosis && diagnosis.hint) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Cimon SBOM: ${diagnosis.hint}`);
+    }
 
     // Display SBOM summary in job summary.
     const reportJobSummary = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getBooleanInput('report-job-summary');
     if (reportJobSummary) {
-        await (0,_sbom_summary_js__WEBPACK_IMPORTED_MODULE_6__/* .writeSBOMSummary */ .kq)(_actions_core__WEBPACK_IMPORTED_MODULE_0__, sbomEntries, { sbomEnabled });
+        await (0,_sbom_summary_js__WEBPACK_IMPORTED_MODULE_7__/* .writeSBOMSummary */ .kq)(_actions_core__WEBPACK_IMPORTED_MODULE_0__, sbomEntries, { sbomEnabled, diagnosis });
     }
 
     // Upload SBOM files as artifacts (best-effort, never fails the workflow).
-    await uploadSBOMArtifacts(sbomEntries);
+    await uploadSBOMArtifacts(sbomEntries, _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('sbom-artifact-name') || 'cimon-sbom');
+
+    // Keep the agent's output as an artifact when the Windows agent explains
+    // a problem, or at debug level, so that one file carries what a report
+    // of the problem needs.
+    if (
+        (diagnosis && diagnosis.hint) ||
+        config.cimon.logLevel == 'debug' ||
+        config.cimon.logLevel == 'trace'
+    ) {
+        await uploadAgentLog(stopOutput);
+    }
 
     if (retval !== 0) {
         throw new Error(`Failed stopping Cimon process: ${retval}`);
@@ -127842,7 +127865,7 @@ async function run(config) {
  *
  * Best-effort: errors are logged as warnings, never fail the workflow.
  */
-async function uploadSBOMArtifacts(sbomEntries) {
+async function uploadSBOMArtifacts(sbomEntries, artifactName) {
     if (!sbomEntries || sbomEntries.length === 0) return;
 
     // Collect all existing SBOM files from parsed entries.
@@ -127855,6 +127878,10 @@ async function uploadSBOMArtifacts(sbomEntries) {
         for (const filePath of [entry.cyclonedx, entry.spdx]) {
             if (filePath && fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(filePath)) {
                 filesToUpload.push(filePath);
+                // The agent's signature beside it (CIMON_SBOM_SIGN_ENABLED).
+                if (fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(filePath + '.sig')) {
+                    filesToUpload.push(filePath + '.sig');
+                }
             }
         }
     }
@@ -127866,8 +127893,8 @@ async function uploadSBOMArtifacts(sbomEntries) {
 
     // Also include evidence files if they sit alongside the SBOMs.
     for (const sbomFile of [...filesToUpload]) {
-        const dir = path__WEBPACK_IMPORTED_MODULE_3__.dirname(sbomFile);
-        const evidencePath = path__WEBPACK_IMPORTED_MODULE_3__.join(dir, 'sbom.evidence.json');
+        const dir = path__WEBPACK_IMPORTED_MODULE_4__.dirname(sbomFile);
+        const evidencePath = path__WEBPACK_IMPORTED_MODULE_4__.join(dir, 'sbom.evidence.json');
         if (fs__WEBPACK_IMPORTED_MODULE_2__.existsSync(evidencePath) && !filesToUpload.includes(evidencePath)) {
             filesToUpload.push(evidencePath);
         }
@@ -127880,9 +127907,9 @@ async function uploadSBOMArtifacts(sbomEntries) {
     let rootDir;
     const sbomOutputDir = process.env.CIMON_SBOM_OUTPUT_DIRECTORY;
     if (sbomOutputDir) {
-        const normalizedOutputDir = path__WEBPACK_IMPORTED_MODULE_3__.resolve(sbomOutputDir);
+        const normalizedOutputDir = path__WEBPACK_IMPORTED_MODULE_4__.resolve(sbomOutputDir);
         const allUnderOutputDir = filesToUpload.every(
-            (f) => f.startsWith(normalizedOutputDir + path__WEBPACK_IMPORTED_MODULE_3__.sep) || f === normalizedOutputDir
+            (f) => f.startsWith(normalizedOutputDir + path__WEBPACK_IMPORTED_MODULE_4__.sep) || f === normalizedOutputDir
         );
         rootDir = allUnderOutputDir ? normalizedOutputDir : findCommonRoot(filesToUpload);
     } else {
@@ -127890,9 +127917,9 @@ async function uploadSBOMArtifacts(sbomEntries) {
     }
 
     try {
-        const artifact = new _actions_artifact__WEBPACK_IMPORTED_MODULE_4__.DefaultArtifactClient();
+        const artifact = new _actions_artifact__WEBPACK_IMPORTED_MODULE_5__.DefaultArtifactClient();
         const { id, size } = await artifact.uploadArtifact(
-            'cimon-sbom',
+            artifactName,
             filesToUpload,
             rootDir,
             { retentionDays: 90 }
@@ -127905,24 +127932,44 @@ async function uploadSBOMArtifacts(sbomEntries) {
 }
 
 /**
+ * Uploads the output of `cimon agent stop`, which carries the agent's log,
+ * as the cimon-agent-log-<job> artifact. Best-effort.
+ */
+async function uploadAgentLog(stopOutput) {
+    if (!stopOutput) return;
+    try {
+        const dir = fs__WEBPACK_IMPORTED_MODULE_2__.mkdtempSync(path__WEBPACK_IMPORTED_MODULE_4__.join(process.env.RUNNER_TEMP || os__WEBPACK_IMPORTED_MODULE_3__.tmpdir(), 'cimon-agent-log-'));
+        const file = path__WEBPACK_IMPORTED_MODULE_4__.join(dir, 'cimon-agent.log');
+        fs__WEBPACK_IMPORTED_MODULE_2__.writeFileSync(file, stopOutput);
+        const artifact = new _actions_artifact__WEBPACK_IMPORTED_MODULE_5__.DefaultArtifactClient();
+        // One per job: a workflow run's artifacts need distinct names.
+        const name = process.env.GITHUB_JOB ? `cimon-agent-log-${process.env.GITHUB_JOB}` : 'cimon-agent-log';
+        const { id } = await artifact.uploadArtifact(name, [file], dir, { retentionDays: 30 });
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.info(`Cimon: uploaded the agent's log as the ${name} artifact (id=${id})`);
+    } catch (err) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Cimon: uploading the agent's log failed (non-fatal): ${err.message}`);
+    }
+}
+
+/**
  * Find the longest common directory prefix for a list of absolute paths.
  */
 function findCommonRoot(paths) {
     if (paths.length === 0) return '/';
-    if (paths.length === 1) return path__WEBPACK_IMPORTED_MODULE_3__.dirname(paths[0]);
+    if (paths.length === 1) return path__WEBPACK_IMPORTED_MODULE_4__.dirname(paths[0]);
 
-    const dirs = paths.map((p) => path__WEBPACK_IMPORTED_MODULE_3__.dirname(p));
-    const segments = dirs[0].split(path__WEBPACK_IMPORTED_MODULE_3__.sep);
+    const dirs = paths.map((p) => path__WEBPACK_IMPORTED_MODULE_4__.dirname(p));
+    const segments = dirs[0].split(path__WEBPACK_IMPORTED_MODULE_4__.sep);
     let common = '';
     for (let i = 0; i < segments.length; i++) {
-        const candidate = segments.slice(0, i + 1).join(path__WEBPACK_IMPORTED_MODULE_3__.sep) || path__WEBPACK_IMPORTED_MODULE_3__.sep;
-        if (dirs.every((d) => d.startsWith(candidate + path__WEBPACK_IMPORTED_MODULE_3__.sep) || d === candidate)) {
+        const candidate = segments.slice(0, i + 1).join(path__WEBPACK_IMPORTED_MODULE_4__.sep) || path__WEBPACK_IMPORTED_MODULE_4__.sep;
+        if (dirs.every((d) => d.startsWith(candidate + path__WEBPACK_IMPORTED_MODULE_4__.sep) || d === candidate)) {
             common = candidate;
         } else {
             break;
         }
     }
-    return common || path__WEBPACK_IMPORTED_MODULE_3__.sep;
+    return common || path__WEBPACK_IMPORTED_MODULE_4__.sep;
 }
 
 try {
@@ -127953,6 +128000,7 @@ __webpack_handle_async_dependencies__();
 
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
 /* harmony export */   "ws": () => (/* binding */ parseSBOMEntries),
+/* harmony export */   "Ny": () => (/* binding */ parseSBOMDiagnosis),
 /* harmony export */   "iE": () => (/* binding */ isSBOMEnabled),
 /* harmony export */   "kq": () => (/* binding */ writeSBOMSummary)
 /* harmony export */ });
@@ -127996,6 +128044,77 @@ function parseSBOMEntries(output) {
         }
     }
     return entries;
+}
+
+/**
+ * Parses the Windows agent's SBOM diagnosis from cimon agent stop output:
+ * its hint, which says why a job has no SBOM or what to check (empty when
+ * everything worked), what each build it followed came to, and examples of
+ * linker runs no followed build observed.
+ *
+ * @param {string} output - Combined stdout+stderr from `cimon agent stop`.
+ * @returns {{hint: string, builds: Array<{buildSystem: string, dir: string, outcome: string, detail: string}>, linkerExamples: string[]} | null}
+ *   null when the agent logged no diagnosis (Linux, or older cimon versions).
+ */
+function parseSBOMDiagnosis(output) {
+    let hint = null;
+    const builds = [];
+    let linkerExamples = [];
+    for (const line of output.split('\n')) {
+        if (!line.includes('"SBOM diagnosis')) continue;
+        let parsed;
+        try {
+            parsed = JSON.parse(line);
+        } catch {
+            continue;
+        }
+        const message = parsed.message ?? parsed.msg;
+        if (message === 'SBOM diagnosis') {
+            hint = parsed.hint || '';
+        } else if (message === 'SBOM diagnosis: build') {
+            builds.push({
+                buildSystem: parsed.buildSystem || '',
+                dir: parsed.dir || '',
+                outcome: parsed.outcome || '',
+                detail: parsed.detail || '',
+            });
+        } else if (message === 'SBOM diagnosis: linker runs') {
+            linkerExamples = parsed.examples || [];
+        }
+    }
+    if (hint === null) return null;
+    return { hint, builds, linkerExamples };
+}
+
+function escapeHTML(text) {
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+/**
+ * Renders the agent's diagnosis for the job summary: its hint, the builds
+ * that got no SBOM and why, and the linker runs no followed build observed.
+ */
+function diagnosisHTML(diagnosis) {
+    let html = `<p><strong>Why:</strong> ${escapeHTML(diagnosis.hint)}</p>\n`;
+    const unwritten = diagnosis.builds.filter((b) => b.outcome !== 'sbom written');
+    if (unwritten.length > 0) {
+        html += '<p>Builds without an SBOM:</p>\n<ul>\n';
+        for (const b of unwritten) {
+            html += `<li>${escapeHTML(b.buildSystem)} build in <code>${escapeHTML(b.dir)}</code>: ${escapeHTML(b.outcome)} (${escapeHTML(b.detail)})</li>\n`;
+        }
+        html += '</ul>\n';
+    }
+    if (diagnosis.linkerExamples.length > 0) {
+        html += '<p>Linker runs outside the builds the agent followed:</p>\n<ul>\n';
+        for (const example of diagnosis.linkerExamples) {
+            html += `<li><code>${escapeHTML(example)}</code></li>\n`;
+        }
+        html += '</ul>\n';
+    }
+    return html;
 }
 
 /**
@@ -128049,7 +128168,8 @@ function filterMeaningfulEntries(entries) {
  * @param {{sbomEnabled: boolean}} options
  */
 async function writeSBOMSummary(core, sbomEntries, options = {}) {
-    const { sbomEnabled = false } = options;
+    const { sbomEnabled = false, diagnosis = null } = options;
+    const explain = diagnosis && diagnosis.hint ? diagnosisHTML(diagnosis) : '';
 
     // Case 3: SBOM not enabled — nothing to report.
     if (sbomEntries.length === 0 && !sbomEnabled) return;
@@ -128059,8 +128179,10 @@ async function writeSBOMSummary(core, sbomEntries, options = {}) {
         await core.summary
             .addHeading('Cimon SBOM Report', 2)
             .addRaw(
-                'SBOM generation was enabled but no SBOMs were produced. ' +
-                    'This can happen when no build artifacts (executables or libraries) were detected during the build.\n'
+                explain
+                    ? 'SBOM generation was enabled but no SBOMs were produced.\n' + explain
+                    : 'SBOM generation was enabled but no SBOMs were produced. ' +
+                          'This can happen when no build artifacts (executables or libraries) were detected during the build.\n'
             )
             .write();
         return;
@@ -128131,11 +128253,12 @@ async function writeSBOMSummary(core, sbomEntries, options = {}) {
         rows.push(row);
     }
 
-    await core.summary
+    const summary = core.summary
         .addHeading('Cimon SBOM Report', 2)
         .addRaw(parts.join(', ') + '.\n\n')
-        .addTable(rows)
-        .write();
+        .addTable(rows);
+    if (explain) summary.addRaw(explain);
+    await summary.write();
 }
 
 
