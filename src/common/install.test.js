@@ -8,6 +8,7 @@ import { isConfigError } from './release.js';
 import {
     checksumFor,
     cosignAsset,
+    cosignVerifyEnv,
     installRelease,
     releaseAsset,
 } from './install.js';
@@ -39,6 +40,13 @@ describe('cosignAsset', () => {
         assert.equal(cosignAsset('linux', 'x64'), 'cosign-linux-amd64');
         assert.equal(cosignAsset('darwin', 'arm64'), 'cosign-darwin-arm64');
         assert.equal(cosignAsset('win32', 'arm64'), 'cosign-windows-amd64.exe');
+    });
+});
+
+describe('cosignVerifyEnv', () => {
+    it('adds the CT log key file and keeps the given environment', () => {
+        const env = cosignVerifyEnv('/k.pub', { PATH: '/bin', HOME: '/h' });
+        assert.deepEqual(env, { PATH: '/bin', HOME: '/h', SIGSTORE_CT_LOG_PUBLIC_KEY_FILE: '/k.pub' });
     });
 });
 
@@ -125,6 +133,19 @@ describe('installRelease', () => {
                 'checksums.txt.sig', '--insecure-ignore-tlog', 'checksums.txt'],
             ['extract', ASSET, 'tar'],
         ]);
+    });
+
+    it('runs cosign with the key as its CT log key, so it needs no network', async () => {
+        let env;
+        await installRelease(options({
+            run: async (command, args, opts = {}) => {
+                env = opts.env;
+                return 0;
+            },
+        }));
+        assert.ok(env, 'cosign gets an environment');
+        assert.equal(env.SIGSTORE_CT_LOG_PUBLIC_KEY_FILE, path.join(workDir, 'cimon-cosign.pub'));
+        assert.equal(env.PATH, process.env.PATH, 'the rest of the environment is kept');
     });
 
     it('refuses a release whose signature does not verify', async () => {

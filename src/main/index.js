@@ -9,6 +9,7 @@ import {
     COSIGN_SHA256,
     checksumFor,
     COSIGN_VERSION,
+    cosignVerifyEnv,
     installRelease,
     sha256File,
 } from '../common/install.js';
@@ -131,7 +132,7 @@ async function downloadV1Binary(version, { pinned = false } = {}) {
         '--signature', checksumSigPath,
         '--insecure-ignore-tlog',
         checksumPath,
-    ], { ignoreReturnCode: true, silent: true });
+    ], { ignoreReturnCode: true, silent: true, env: cosignVerifyEnv(pubKeyPath) });
 
     if (verifyResult !== 0) {
         throw new Error(
@@ -188,7 +189,8 @@ async function downloadWindowsBinary(version, { pinned = false } = {}) {
         workDir: path.join(DOWNLOAD_DIR, 'cimon-v1'),
         log: (message) => core.info(message),
         download: downloadBinaryToFile,
-        run: (command, args) => exec.exec(command, args, { ignoreReturnCode: true }),
+        run: (command, args, options = {}) =>
+            exec.exec(command, args, { ignoreReturnCode: true, ...options }),
         // Windows' own tar.exe (bsdtar) extracts zip archives.
         extract: async (archive, dest) => {
             const code = await exec.exec('tar', ['-xf', archive, '-C', dest], {

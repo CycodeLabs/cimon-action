@@ -129,13 +129,26 @@ async function installCosign({ platform, arch, workDir, download, cosignSha256, 
     return file;
 }
 
+// cosignVerifyEnv is the environment for `cosign verify-blob --key`. cosign
+// 2.2 loads the certificate transparency log keys whenever a key is given,
+// from Sigstore's TUF repository unless SIGSTORE_CT_LOG_PUBLIC_KEY_FILE names
+// a file to read them from. Those keys check the timestamps of keyless
+// certificates and play no part in verifying a signature made with a key, so
+// the key being checked stands in for them. The check then needs no network,
+// which matters on runners that cannot reach tuf-repo-cdn.sigstore.dev, such
+// as one where the Cimon agent's prevent mode does not allow it.
+export function cosignVerifyEnv(keyPath, env = process.env) {
+    return { ...env, SIGSTORE_CT_LOG_PUBLIC_KEY_FILE: keyPath };
+}
+
 // installRelease downloads cimon release `tag` into workDir, verifies it, and
 // returns the path of the extracted binary. Any failed check throws before
 // the archive is extracted.
 //
 //   download(url, destPath): resolves once the file is written; rejects with
 //     an error carrying httpStatusCode on an HTTP error.
-//   run(command, args): resolves to the exit code.
+//   run(command, args, options): resolves to the exit code; options.env is
+//     the environment to run the command with.
 //   extract(archivePath, destDir, kind): kind is 'zip' or 'tar' (gzip).
 //
 // With pinned set (the tag came from the version input), a release without
@@ -199,15 +212,19 @@ export async function installRelease({
     // Release signatures are not in a transparency log, hence
     // --insecure-ignore-tlog; the key is what is being checked.
     log('Verifying the cosign signature on checksums.txt');
-    const code = await run(cosign, [
-        'verify-blob',
-        '--key',
-        keyPath,
-        '--signature',
-        signaturePath,
-        '--insecure-ignore-tlog',
-        checksumsPath,
-    ]);
+    const code = await run(
+        cosign,
+        [
+            'verify-blob',
+            '--key',
+            keyPath,
+            '--signature',
+            signaturePath,
+            '--insecure-ignore-tlog',
+            checksumsPath,
+        ],
+        { env: cosignVerifyEnv(keyPath) }
+    );
     if (code !== 0) {
         throw new Error(
             `Signature check failed for cimon ${tag}: checksums.txt is not ` +

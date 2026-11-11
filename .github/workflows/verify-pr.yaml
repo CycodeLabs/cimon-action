@@ -396,6 +396,63 @@ jobs:
           curl -I https://cycode.com
           wget --quiet --timeout 1 https://registry.npmjs.org || true
 
+  # A job that starts the agent in prevent mode and then attests, as Cimon's
+  # own release job does. The attest action checks the release it downloads
+  # with cosign, which must not need Sigstore's TUF repository: prevent mode
+  # does not allow it, and cosign stopped there before it was given the
+  # certificate transparency log key from a file.
+  verify-prevent-agent-then-attest:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
+
+      - name: Run Cimon Agent (prevent mode, hardening tier 3)
+        uses: ./
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
+          prevent: true
+          hardening: true
+          hardening-tier: '3'
+          fail-on-error: true
+
+      - name: Create Artifact
+        run: echo artifact > artifact.txt
+
+      - name: Run Cimon Attest
+        uses: ./attest
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
+          subjects: artifact.txt
+          report-job-summary: true
+          fail-on-error: true
+
+  # The agent action's verified download of the latest release on a runner
+  # that cannot reach Sigstore's TUF repository, as on a network that allows
+  # only GitHub.
+  verify-agent-download-without-sigstore-tuf:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
+
+      - name: Make Sigstore's TUF repository unreachable
+        run: |
+          echo '0.0.0.0 tuf-repo-cdn.sigstore.dev' | sudo tee -a /etc/hosts
+          if curl -sS --max-time 10 -o /dev/null https://tuf-repo-cdn.sigstore.dev/; then
+            echo 'tuf-repo-cdn.sigstore.dev is still reachable' >&2
+            exit 1
+          fi
+
+      - name: Run Cimon Agent (latest release, verified download)
+        uses: ./
+        with:
+          client-id: ${{ secrets.CIMON_CLIENT_ID }}
+          secret: ${{ secrets.CIMON_SECRET }}
+          fail-on-error: true
+
   # The version input pins the Cimon release instead of running the latest
   # one. PINNED_VERSION is deliberately older than the latest release, and
   # each job compares the binary the action ran with the one in that
