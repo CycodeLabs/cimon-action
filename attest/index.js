@@ -84,8 +84,8 @@ async function installVerified(githubToken, version) {
         download: async (url, dest) => {
             await tc.downloadTool(url, dest);
         },
-        run: (command, args) =>
-            exec.exec(command, args, { ignoreReturnCode: true }),
+        run: (command, args, options = {}) =>
+            exec.exec(command, args, { ignoreReturnCode: true, ...options }),
         extract: async (archive, dest, kind) => {
             if (kind === 'zip') {
                 await tc.extractZip(archive, dest);
