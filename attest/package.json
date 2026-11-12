@@ -13,11 +13,11 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "@actions/artifact": "^2.2.1",
-    "@actions/core": "^1.11.1",
+    "@actions/artifact": "^6.0.0",
+    "@actions/core": "^2.0.0",
     "@actions/exec": "^1.1.1",
-    "@actions/http-client": "^2.2.3",
-    "@actions/tool-cache": "^2.0.2"
+    "@actions/http-client": "^3.0.2",
+    "@actions/tool-cache": "^3.0.0"
   },
   "devDependencies": {
     "@vercel/ncc": "^0.38.4"
